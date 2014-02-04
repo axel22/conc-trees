@@ -37,3 +37,9 @@ case class <>[T](left: Conc[T], right: Conc[T]) {
   val size = left.size + right.size
 }
 
+
+object Conc {
+
+  def concat[T](self: Conc[T], that: Conc[T]) = ???
+
+}
