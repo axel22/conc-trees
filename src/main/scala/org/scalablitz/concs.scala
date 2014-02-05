@@ -146,7 +146,7 @@ object Conc {
     case Single(x) =>
       if (i == 0) new <>(Single(y), xs)
       else new <>(xs, Single(y))
-    case Chunk(a, sz, k) if sz == k =>
+    case Chunk(a: Array[T], sz, k) if sz == k =>
       if (i < k / 2) {
         val la = insertedArray(a, 0, i, y, k / 2)
         val ra = copiedArray(a, k / 2, k - k / 2)
