@@ -16,29 +16,6 @@ sealed abstract class Conc[+T] {
 }
 
 
-sealed abstract class Leaf[T] extends Conc[T] {
-  def left = throw new UnsupportedOperationException
-  def right = throw new UnsupportedOperationException
-}
-
-
-case object Empty extends Leaf[Nothing] {
-  def level = 0
-  def size = 0
-}
-
-
-case class Single[T](x: T) extends Leaf[T] {
-  def level = 0
-  def size = 1
-}
-
-
-case class Chunk[T](array: Array[T], size: Int) extends Leaf[T] {
-  def level = 0
-}
-
-
 case class <>[T](left: Conc[T], right: Conc[T]) extends Conc[T] {
   val level = 1 + math.max(left.level, right.level)
   val size = left.size + right.size
@@ -47,13 +24,55 @@ case class <>[T](left: Conc[T], right: Conc[T]) extends Conc[T] {
 
 object Conc {
 
+  /* data types */
+
+  sealed abstract class Leaf[T] extends Conc[T] {
+    def left = throw new UnsupportedOperationException
+    def right = throw new UnsupportedOperationException
+  }
+  
+  
+  case object Empty extends Leaf[Nothing] {
+    def level = 0
+    def size = 0
+  }
+  
+  
+  case class Single[T](x: T) extends Leaf[T] {
+    def level = 0
+    def size = 1
+  }
+  
+  
+  case class Chunk[T](array: Array[T], size: Int, k: Int) extends Leaf[T] {
+    def level = 0
+  }
+  
+  
+  /* operations */
+
+  def foreach[T](xs: Conc[T], f: T => Unit): Unit = (xs: @unchecked) match {
+    case left <> right =>
+      foreach(left, f)
+      foreach(right, f)
+    case Single(x) =>
+      f(x)
+    case Chunk(a, sz, _) =>
+      var i = 0
+      while (i < sz) {
+        f(a(i))
+        i += 1
+      }
+    case Empty =>
+  }
+
   def apply[T](xs: Conc[T], i: Int): T = (xs: @unchecked) match {
-    case <>(left, _) if i < left.size =>
+    case left <> _ if i < left.size =>
       apply(left, i)
-    case <>(left, right) =>
+    case left <> right =>
       apply(right, i - left.size)
     case Single(x) => x
-    case Chunk(a, _) => a(i)
+    case Chunk(a, _, _) => a(i)
   }
 
   private def updatedArray[T: ClassTag](a: Array[T], i: Int, y: T, sz: Int) = {
@@ -63,16 +82,16 @@ object Conc {
     na
   }
 
-  def updated[T: ClassTag](xs: Conc[T], i: Int, y: T): Conc[T] = (xs: @unchecked) match {
-    case <>(left, right) if i < left.size =>
-      new <>(updated(left, i, y), right)
-    case <>(left, right) =>
+  def update[T: ClassTag](xs: Conc[T], i: Int, y: T): Conc[T] = (xs: @unchecked) match {
+    case left <> right if i < left.size =>
+      new <>(update(left, i, y), right)
+    case left <> right =>
       val ni = i - left.size
-      new <>(left, updated(right, ni, y))
+      new <>(left, update(right, ni, y))
     case Single(x) =>
       Single(y)
-    case Chunk(a: Array[T], sz) =>
-      Chunk(updatedArray(a, i, y, sz), sz)
+    case Chunk(a: Array[T], sz, k) =>
+      Chunk(updatedArray(a, i, y, sz), sz, k)
   }
 
   def concatTop[T](xs: Conc[T], ys: Conc[T]) = {
@@ -105,7 +124,42 @@ object Conc {
     }
   }
 
-  def inserted[T: ClassTag](xs: Conc[T], i: Int, y: T): Conc[T] = ???
+  private def insertedArray[T: ClassTag](a: Array[T], from: Int, i: Int, y: T, sz: Int) = {
+    val na = new Array[T](sz + 1)
+    System.arraycopy(a, from, na, 0, i)
+    na(i) = y
+    System.arraycopy(a, from + i, na, i + 1, sz - i)
+    na
+  }
+
+  private def copiedArray[T: ClassTag](a: Array[T], from: Int, sz: Int) = {
+    val na = new Array[T](sz)
+    System.arraycopy(a, from, na, 0, sz)
+    na
+  }
+
+  def insert[T: ClassTag](xs: Conc[T], i: Int, y: T): Conc[T] = (xs: @unchecked) match {
+    case left <> right if i < left.size =>
+      insert(left, i, y) <> right
+    case left <> right =>
+      left <> insert(right, i - left.size, y)
+    case Single(x) =>
+      if (i == 0) new <>(Single(y), xs)
+      else new <>(xs, Single(y))
+    case Chunk(a, sz, k) if sz == k =>
+      if (i < k / 2) {
+        val la = insertedArray(a, 0, i, y, k / 2)
+        val ra = copiedArray(a, k / 2, k - k / 2)
+        new <>(Chunk(la, k / 2 + 1, k), Chunk(ra, k - k / 2, k))
+      } else {
+        ???
+        // val la = copiedArray(a, 0, i, y, k / 2)
+        // val ra = insertedArray(a, k / 2, k - k / 2)
+        // new <>(Chunk(la, k / 2 + 1, k), Chunk(ra, k - k / 2, k))
+      }
+    case Chunk(a: Array[T], sz, k) =>
+      Chunk(insertedArray(a, 0, i, y, sz), sz + 1, k)
+  }
 
 }
 

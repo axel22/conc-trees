@@ -2,16 +2,19 @@ package org.scalablitz
 
 
 
+import org.scalatest._
+import Conc._
 
 
 
-object Syntax {
+class ConcListSuite extends FunSuite with ConcListSnippets {
 
-  def concLists() {
-    val a = Single(1)
-    val b = Single(2)
+  test("ConcList.apply") {
+    var xs: Conc[Int] = Empty
 
-    a <> b
+    intercept[IllegalArgumentException] {
+      xs(0)
+    }
   }
 
 }
