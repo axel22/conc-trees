@@ -31,23 +31,19 @@ object Conc {
     def right = throw new UnsupportedOperationException
   }
   
-  
   case object Empty extends Leaf[Nothing] {
     def level = 0
     def size = 0
   }
-  
   
   case class Single[T](x: T) extends Leaf[T] {
     def level = 0
     def size = 1
   }
   
-  
   case class Chunk[T](array: Array[T], size: Int, k: Int) extends Leaf[T] {
     def level = 0
   }
-  
   
   /* operations */
 
