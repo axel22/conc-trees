@@ -152,10 +152,9 @@ object Conc {
         val ra = copiedArray(a, k / 2, k - k / 2)
         new <>(Chunk(la, k / 2 + 1, k), Chunk(ra, k - k / 2, k))
       } else {
-        ???
-        // val la = copiedArray(a, 0, i, y, k / 2)
-        // val ra = insertedArray(a, k / 2, k - k / 2)
-        // new <>(Chunk(la, k / 2 + 1, k), Chunk(ra, k - k / 2, k))
+        val la = copiedArray(a, 0, k / 2)
+        val ra = insertedArray(a, k / 2, i - k / 2, y, k - k / 2 + 1)
+        new <>(Chunk(la, k / 2, k), Chunk(ra, k - k / 2 + 1, k))
       }
     case Chunk(a: Array[T], sz, k) =>
       Chunk(insertedArray(a, 0, i, y, sz), sz + 1, k)
