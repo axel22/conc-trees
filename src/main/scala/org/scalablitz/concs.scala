@@ -71,7 +71,7 @@ object Conc {
     case Chunk(a, _, _) => a(i)
   }
 
-  private def updatedArray[T: ClassTag](a: Array[T], i: Int, y: T, sz: Int) = {
+  private def updatedArray[T: ClassTag](a: Array[T], i: Int, y: T, sz: Int): Array[T] = {
     val na = new Array[T](a.length)
     System.arraycopy(a, 0, na, 0, sz)
     na(i) = y
@@ -120,7 +120,7 @@ object Conc {
     }
   }
 
-  private def insertedArray[T: ClassTag](a: Array[T], from: Int, i: Int, y: T, sz: Int) = {
+  private def insertedArray[T: ClassTag](a: Array[T], from: Int, i: Int, y: T, sz: Int): Array[T] = {
     val na = new Array[T](sz + 1)
     System.arraycopy(a, from, na, 0, i)
     na(i) = y
@@ -128,7 +128,7 @@ object Conc {
     na
   }
 
-  private def copiedArray[T: ClassTag](a: Array[T], from: Int, sz: Int) = {
+  private def copiedArray[T: ClassTag](a: Array[T], from: Int, sz: Int): Array[T] = {
     val na = new Array[T](sz)
     System.arraycopy(a, from, na, 0, sz)
     na
@@ -156,7 +156,37 @@ object Conc {
       Chunk(insertedArray(a, 0, i, y, sz), sz + 1, k)
   }
 
+  def shakeLeft(xs: Conc[T]): Conc[T] = {
+    if (xs.level <= 1) xs
+    else if (xs.left.level >= xs.right.level) xs
+    else if (xs.right.right.level == xs.level - 2) {
+      //
+      //         n                              n
+      //   +-----+-----+                  +-----+-----+
+      // n - 2       n - 1      =>      n - 1       n - 2
+      //           +---+---+          +---+---+    (n - 2)
+      //         n - 2   n - 2      n - 2   n - 2
+      //        (n - 3) (n - 2)            (n - 3)
+      //
+      val nl = new <>(xs.left, xs.right.left)
+      val nr = xs.right.right
+      new <>(nl, nr)
+    } else {
+      //
+      //         n                              n
+      //   +-----+-----+                  +-----+-----+
+      // n - 2       n - 1      =>      n - 1       n - 2
+      //           +---+---+          +---+---+
+      //         n - 2   n - 3      n - 2   n - 2
+      //
+      ???
+    }
+  }
+
 }
+
+
+
 
 
 
