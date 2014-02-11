@@ -156,7 +156,7 @@ object Conc {
       Chunk(insertedArray(a, 0, i, y, sz), sz + 1, k)
   }
 
-  def shakeLeft(xs: Conc[T]): Conc[T] = {
+  def shakeLeft[T](xs: Conc[T]): Conc[T] = {
     if (xs.level <= 1) xs
     else if (xs.left.level >= xs.right.level) xs
     else if (xs.right.right.level == xs.level - 2) {
@@ -171,14 +171,20 @@ object Conc {
       val nl = new <>(xs.left, xs.right.left)
       val nr = xs.right.right
       new <>(nl, nr)
+    } else if (xs.left.left.level == xs.left.right.level) {
+      //
+      //                    n                                      n                
+      //          +---------+---------+                  +---------+---------+      
+      //        n - 2               n - 1      =>      n - 1               n - 2    
+      //      +---+---+           +---+---+          +---+---+           +---+---+  
+      //    n - 3   n - 3       n - 2   n - 3      n - 3   n - 2       n - 3   n - 3
+      //                      +---+---+                  +---+---+    (n - 4)       
+      //                    n - 3   n - 3              n - 3   n - 3  (n - 3)       
+      //                   (n - 3) (n - 4)                    (n - 3)               
+      //                   (n - 4) (n - 3)                    (n - 4)               
+      //
+      ???
     } else {
-      //
-      //         n                              n
-      //   +-----+-----+                  +-----+-----+
-      // n - 2       n - 1      =>      n - 1       n - 2
-      //           +---+---+          +---+---+
-      //         n - 2   n - 3      n - 2   n - 2
-      //
       ???
     }
   }
