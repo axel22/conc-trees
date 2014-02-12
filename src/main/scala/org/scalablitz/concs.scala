@@ -168,13 +168,13 @@ object Conc {
       xs
     } else if (xs.left.level >= xs.right.level) {
       //
-      //                 n            
-      //           +-----+-----+      
-      //         n - 1       n - 1    
-      //       +---+---+    (n - 2)   
-      //     n - 2   n - 2            
-      //    (n - 3) (n - 2)           
-      //    (n - 2) (n - 3)           
+      //                 n             
+      //           +-----+-----+       
+      //         n - 1       n - 1     
+      //       +---+---+    (n - 2)    
+      //     n - 2   n - 2             
+      //    (n - 3) (n - 2)            
+      //    (n - 2) (n - 3)            
       //
       xs
     } else if (xs.right.right.level >= xs.right.left.level) {
