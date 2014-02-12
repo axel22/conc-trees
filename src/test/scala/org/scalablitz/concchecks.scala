@@ -57,5 +57,13 @@ object ConcListChecks extends Properties("ConcList") with ConcListSnippets {
     )
   }
 
+  property("test right shake") = forAll(trees(10)) { tree =>
+    val shaken = Conc.shakeRight(tree)
+    all(
+      s"invariants: $shaken" |: checkInvs(shaken),
+      s"leaning right: $shaken" |: (shaken.level <= 1 || shaken.level < tree.level || shaken.left.level <= shaken.right.level)
+    )
+  }
+
 }
 
