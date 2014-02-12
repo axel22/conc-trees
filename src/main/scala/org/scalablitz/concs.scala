@@ -260,6 +260,19 @@ object Conc {
     }
   }
 
+  def shakeRight[T](xs: Conc[T]): Conc[T] = {
+    if (xs.level <= 1) {
+      //
+      //       1       
+      //    +--+--+    
+      //    0     0    
+      //
+      xs
+    } else {
+      ???
+    }
+  }
+
 }
 
 

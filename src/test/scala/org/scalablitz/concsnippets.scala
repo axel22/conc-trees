@@ -25,23 +25,25 @@ trait ConcListSnippets {
     buffer
   }
 
-  def testConcatCorrectness(n: Int) = {
-    var xs: Conc[Int] = concList(0 until n)
-
-    toSeq(xs) == (0 until n)
+  def checkInvs(xs: Conc[Int]): Boolean = xs match {
+    case left <> right =>
+      math.abs(left.level - right.level) <= 1 && checkInvs(left) && checkInvs(right)
+    case _ =>
+      true
   }
 
-  def testConcatBalance(n: Int) = {
+  def testConcatCorrectness(n: Int, m: Int) = {
     var xs: Conc[Int] = concList(0 until n)
+    var ys: Conc[Int] = concList(0 until m)
 
-    def check(xs: Conc[Int]): Boolean = xs match {
-      case left <> right =>
-        math.abs(left.level - right.level) <= 1 && check(left) && check(right)
-      case _ =>
-        true
-    }
+    toSeq(xs <> ys) == ((0 until n) ++ (0 until m))
+  }
 
-    check(xs)
+  def testConcatBalance(n: Int, m: Int) = {
+    var xs: Conc[Int] = concList(0 until n)
+    var ys: Conc[Int] = concList(0 until m)
+
+    checkInvs(xs <> ys)
   }
 
   def testApply(n: Int) = {
