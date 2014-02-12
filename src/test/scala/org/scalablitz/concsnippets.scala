@@ -75,7 +75,7 @@ trait ConcListSnippets {
     val buffer = mutable.Buffer[Int]() ++ (0 until size)
 
     for (i <- 0 until samples) {
-      val sample = (seed + i * 179) % xs.size 
+      val sample = (seed + i * 179) % (xs.size + 1)
       xs = xs.insert(sample, -sample - 1)
       buffer.insert(sample, -sample - 1)
     }

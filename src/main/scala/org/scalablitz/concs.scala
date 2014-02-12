@@ -157,21 +157,36 @@ object Conc {
   }
 
   def shakeLeft[T](xs: Conc[T]): Conc[T] = {
-    if (xs.level <= 1) xs
-    else if (xs.left.level >= xs.right.level) xs
-    else if (xs.right.right.level == xs.level - 2) {
+    if (xs.level <= 1) {
       //
-      //         n                              n
-      //   +-----+-----+                  +-----+-----+
-      // n - 2       n - 1      =>      n - 1       n - 2
-      //           +---+---+          +---+---+    (n - 2)
-      //         n - 2   n - 2      n - 2   n - 2
-      //        (n - 3) (n - 2)            (n - 3)
+      //       1       
+      //    +--+--+    
+      //    0     0    
+      //
+      xs
+    } else if (xs.left.level >= xs.right.level) {
+      //
+      //                 n            
+      //           +-----+-----+      
+      //         n - 1       n - 2    
+      //       +---+---+              
+      //     n - 2   n - 2            
+      //    (n - 3) (n - 2)           
+      //
+      xs
+    } else if (xs.right.right.level >= xs.right.left.level) {
+      //
+      //            n                              n         
+      //      +-----+-----+                  +-----+-----+   
+      //    n - 2       n - 1      =>      n - 1       n - 2 
+      //              +---+---+          +---+---+    (n - 2)
+      //            n - 2   n - 2      n - 2   n - 2         
+      //           (n - 3) (n - 2)            (n - 3)        
       //
       val nl = new <>(xs.left, xs.right.left)
       val nr = xs.right.right
       new <>(nl, nr)
-    } else if (xs.left.left.level == xs.left.right.level) {
+    } else if (xs.left.left.level >= xs.left.right.level) {
       //
       //                    n                                      n                
       //          +---------+---------+                  +---------+---------+      
@@ -183,9 +198,65 @@ object Conc {
       //                   (n - 3) (n - 4)                    (n - 3)               
       //                   (n - 4) (n - 3)                    (n - 4)               
       //
-      ???
+      //  OR:
+      //
+      //                    n                                      n                
+      //          +---------+---------+                  +---------+---------+      
+      //        n - 2               n - 1      =>      n - 1               n - 2    
+      //      +---+---+           +---+---+          +---+---+           +---+---+  
+      //    n - 3   n - 4       n - 2   n - 3      n - 3   n - 2       n - 3   n - 3
+      //                      +---+---+                  +---+---+    (n - 4)       
+      //                    n - 3   n - 3              n - 4   n - 3                
+      //                   (n - 3) (n - 4)                    (n - 3)               
+      //
+      //  OR:
+      //
+      //                    n                                    n - 1              
+      //          +---------+---------+                  +---------+---------+      
+      //        n - 2               n - 1      =>      n - 2               n - 2    
+      //      +---+---+           +---+---+          +---+---+           +---+---+  
+      //    n - 3   n - 4       n - 2   n - 3      n - 3   n - 3       n - 3   n - 3
+      //                      +---+---+                  +---+---+                  
+      //                    n - 4   n - 3              n - 4   n - 4                
+      //
+      val nll = xs.left.left
+      val nlr = new <>(xs.left.right, xs.right.left.left)
+      val nl = new <>(nll, nlr)
+      val nr = new <>(xs.right.left.right, xs.right.right)
+      new <>(nl, nr)
+    } else if (xs.right.left.left.level >= xs.right.left.right.level) {
+      //
+      //                    n                                             n                
+      //          +---------+---------+                         +---------+---------+      
+      //        n - 2               n - 1      =>             n - 1               n - 2    
+      //      +---+---+           +---+---+              +------+------+        +---+---+  
+      //    n - 4   n - 3       n - 2   n - 3          n - 2         n - 3    n - 3   n - 3
+      //                      +---+---+              +---+---+      (n - 3)  (n - 4)       
+      //                    n - 3   n - 3          n - 4   n - 3                           
+      //                   (n - 3) (n - 4)                                                 
+      //
+      val nll = xs.left
+      val nlr = xs.right.left.left
+      val nl = new <>(nll, nlr)
+      val nr = new <>(xs.right.left.right, xs.right.right)
+      new <>(nl, nr)
     } else {
-      ???
+      //
+      //                       n                                                    n - 1                 
+      //          +------------+------------+                            +------------+------------+      
+      //        n - 2                     n - 1      =>                n - 2                     n - 2    
+      //      +---+---+                 +---+---+              +---------+---------+           +---+---+  
+      //    n - 4   n - 3             n - 2   n - 3          n - 3               n - 3       n - 3   n - 3
+      //          +---+---+         +---+---+              +---+---+           +---+---+                  
+      //        n - 4   n - 4     n - 4   n - 3          n - 4   n - 4       n - 4   n - 4                
+      //       (n - 4) (n - 5)                                  (n - 4)     (n - 5)                       
+      //       (n - 5) (n - 4)                                  (n - 5)     (n - 4)                       
+      //
+      val nll = new <>(xs.left.left, xs.left.right.left)
+      val nlr = new <>(xs.left.right.right, xs.right.left.left)
+      val nl = new <>(nll, nlr)
+      val nr = new <>(xs.right.left.right, xs.right.right)
+      new <>(nl, nr)
     }
   }
 
