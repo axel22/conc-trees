@@ -50,6 +50,22 @@ object Conc {
     val size = left.size + right.size
     override def normalized = wrap(this, Empty)
   }
+
+  class Buffer[T: ClassTag](val k: Int) {
+    private var conc: Conc[T] = Empty
+    private var chunk: Array[T] = new Array[T](k)
+    private var pos: Int = 0
+
+    def +=(elem: T): this.type = if (pos < k) {
+      chunk(pos) = elem
+      pos += 1
+      this
+    } else {
+      ???
+    }
+
+    def toConc: Conc[T] = ???
+  }
   
   /* operations */
 

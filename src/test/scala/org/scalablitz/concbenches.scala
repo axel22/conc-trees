@@ -22,6 +22,14 @@ class ConcBenches extends PerformanceTest.Regression with Serializable {
     xs
   }
 
+  def ropes(k: Int, from: Int, until: Int) = for {
+    size <- sizes(from, until)
+  } yield {
+    val xs = new Conc.Buffer[Int](k)
+    for (x <- 0 until size) xs += x
+    xs.toConc
+  }
+
   def lists(from: Int, until: Int) = for {
     size <- sizes(from, until)
   } yield (0 until size).toList
@@ -37,6 +45,10 @@ class ConcBenches extends PerformanceTest.Regression with Serializable {
   performance of "foreach" config(opts) in {
     using(concs(30000, 150000)) curve("ConcList") in { conc =>
       conc.foreach(x => {})
+    }
+
+    using(ropes(50, 30000, 150000)) curve("ConcRope") in { rope =>
+      rope.foreach(x => {})
     }
 
     using(lists(30000, 150000)) curve("List") in { list =>
