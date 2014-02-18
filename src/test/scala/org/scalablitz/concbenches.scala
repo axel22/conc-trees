@@ -30,7 +30,7 @@ class ConcBenches extends PerformanceTest.Regression with Serializable {
     size <- sizes(from, until)
   } yield (0 until size).toVector
 
-  val opts = org.scalameter.Context(
+  val opts = Context(
     exec.independentSamples -> 1
   )
 
