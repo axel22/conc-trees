@@ -60,11 +60,23 @@ object Conc {
       chunk(pos) = elem
       pos += 1
       this
-    } else {
-      ???
+    } else nextChunk(elem)
+
+    private def pack() {
+      conc = appendTop(conc, new Chunk(chunk, pos, k))
     }
 
-    def toConc: Conc[T] = ???
+    private def nextChunk(elem: T): this.type = {
+      pack()
+      chunk = new Array[T](k)
+      pos = 0
+      this += elem
+    }
+
+    def toConc: Conc[T] = {
+      pack()
+      conc
+    }
   }
   
   /* operations */
