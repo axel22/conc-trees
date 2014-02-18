@@ -7,7 +7,7 @@ import Conc._
 
 
 
-trait ConcListSnippets {
+trait ConcSnippets {
 
   def concList[T](elems: Seq[T]): Conc[T] = {
     var xs: Conc[T] = Empty
@@ -28,6 +28,10 @@ trait ConcListSnippets {
   def checkInvs(xs: Conc[Int]): Boolean = xs match {
     case left <> right =>
       math.abs(left.level - right.level) <= 1 && checkInvs(left) && checkInvs(right)
+    case Append(l @ Append(_, lr), r) =>
+      lr.level > r.level && checkInvs(l) && checkInvs(r)
+    case Append(l, r) =>
+      l.level > r.level && checkInvs(l) && checkInvs(r)
     case _ =>
       true
   }
@@ -85,4 +89,24 @@ trait ConcListSnippets {
     buffer == toSeq(xs)
   }
 
+  def testAppendCorrectness(size: Int, appends: Int) = {
+    var xs = concList(0 until size)
+    for (i <- 0 until appends) xs = xs + i
+
+    val same = toSeq(xs) == ((0 until size) ++ (0 until appends))
+    val sameNorm = toSeq(xs.normalized) == ((0 until size) ++ (0 until appends))
+    same && sameNorm
+  }
+
+  def testAppendBalance(size: Int, appends: Int) = {
+    var xs = concList(0 until size)
+    for (i <- 0 until appends) xs = xs + i
+
+    checkInvs(xs) && checkInvs(xs.normalized)
+  }
+
 }
+
+
+
+

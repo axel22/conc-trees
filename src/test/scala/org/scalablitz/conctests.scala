@@ -7,7 +7,7 @@ import Conc._
 
 
 
-class ConcListSuite extends FunSuite with ConcListSnippets {
+class ConcSuite extends FunSuite with ConcSnippets {
 
   test("ConcList.apply") {
     var xs: Conc[Int] = Empty

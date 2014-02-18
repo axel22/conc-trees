@@ -10,7 +10,7 @@ import Conc._
 
 
 
-object ConcListChecks extends Properties("ConcList") with ConcListSnippets {
+object ConcChecks extends Properties("ConcList") with ConcSnippets {
 
   val genLeaf = for (n <- choose(0, 500)) yield new Conc.Single(n)
 
@@ -65,5 +65,12 @@ object ConcListChecks extends Properties("ConcList") with ConcListSnippets {
     )
   }
 
+  property("test append correctness") = forAll(choose(1, 1000), choose(1, 5000)) {
+    testAppendCorrectness
+  }
+
+  property("test append balance") = forAll(choose(1, 1000), choose(1, 5000)) {
+    testAppendBalance
+  }
 }
 

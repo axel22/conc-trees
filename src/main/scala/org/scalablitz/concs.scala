@@ -12,7 +12,7 @@ sealed abstract class Conc[+T] {
   def size: Int
   def left: Conc[T]
   def right: Conc[T]
-  def normalize = this
+  def normalized = this
 }
 
 
@@ -44,6 +44,12 @@ object Conc {
   case class Chunk[T](array: Array[T], size: Int, k: Int) extends Leaf[T] {
     def level = 0
   }
+
+  case class Append[+T](left: Conc[T], right: Conc[T]) extends Conc[T] {
+    val level = 1 + math.max(left.level, right.level)
+    val size = left.size + right.size
+    override def normalized = wrap(this, Empty)
+  }
   
   /* operations */
 
@@ -60,6 +66,9 @@ object Conc {
         i += 1
       }
     case Empty =>
+    case Append(left, right) =>
+      foreach(left, f)
+      foreach(right, f)
   }
 
   def apply[T](xs: Conc[T], i: Int): T = (xs: @unchecked) match {
@@ -69,6 +78,10 @@ object Conc {
       apply(right, i - left.size)
     case Single(x) => x
     case Chunk(a, _, _) => a(i)
+    case Append(left, _) if i < left.size =>
+      apply(left, i)
+    case Append(left, right) =>
+      apply(right, i - left.size)
   }
 
   private def updatedArray[T: ClassTag](a: Array[T], i: Int, y: T, sz: Int): Array[T] = {
@@ -78,7 +91,7 @@ object Conc {
     na
   }
 
-  def update[T: ClassTag](xs: Conc[T], i: Int, y: T): Conc[T] = (xs: @unchecked) match {
+  def update[T: ClassTag](xs: Conc[T], i: Int, y: T): Conc[T] = (xs.normalized: @unchecked) match {
     case left <> right if i < left.size =>
       new <>(update(left, i, y), right)
     case left <> right =>
@@ -96,7 +109,7 @@ object Conc {
     else concat(xs, ys)
   }
 
-  def concat[T](xs: Conc[T], ys: Conc[T]): Conc[T] = {
+  private def concat[T](xs: Conc[T], ys: Conc[T]): Conc[T] = {
     val diff = ys.level - xs.level
     if (diff >= -1 && diff <= 1) new <>(xs, ys)
     else if (diff < -1) {
@@ -134,7 +147,7 @@ object Conc {
     na
   }
 
-  def insert[T: ClassTag](xs: Conc[T], i: Int, y: T): Conc[T] = (xs: @unchecked) match {
+  def insert[T: ClassTag](xs: Conc[T], i: Int, y: T): Conc[T] = (xs.normalized: @unchecked) match {
     case left <> right if i < left.size =>
       insert(left, i, y) <> right
     case left <> right =>
@@ -156,6 +169,30 @@ object Conc {
       Chunk(insertedArray(a, 0, i, y, sz), sz + 1, k)
     case Empty =>
       Single(y)
+  }
+
+  def appendTop[T](xs: Conc[T], ys: Leaf[T]): Conc[T] = (xs: @unchecked) match {
+    case Empty => ys
+    case xs: Leaf[T] => new <>(xs, ys)
+    case _ <> _ => new Append(xs, ys)
+    case xs: Append[T] => append(xs, ys)
+  }
+
+  private def append[T](xs: Append[T], ys: Conc[T]): Conc[T] = {
+    if (xs.right.level > ys.level) new Append(xs, ys)
+    else {
+      val zs = new <>(xs.right, ys)
+      xs.left match {
+        case ws @ Append(_, _) => append(ws, zs)
+        case ws if ws.level <= zs.level => ws <> zs
+        case ws => new Append(ws, zs)
+      }
+    }
+  }
+
+  def wrap[T](xs: Conc[T], ys: Conc[T]): Conc[T] = (xs: @unchecked) match {
+    case Append(ws, zs) => wrap(ws, zs <> ys)
+    case xs => xs <> ys
   }
 
   def shakeLeft[T](xs: Conc[T]): Conc[T] = {
