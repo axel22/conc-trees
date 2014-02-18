@@ -53,7 +53,7 @@ object Conc {
   
   /* operations */
 
-  def foreach[T](xs: Conc[T], f: T => Unit): Unit = (xs: @unchecked) match {
+  def foreach[T, U](xs: Conc[T], f: T => U): Unit = (xs: @unchecked) match {
     case left <> right =>
       foreach(left, f)
       foreach(right, f)

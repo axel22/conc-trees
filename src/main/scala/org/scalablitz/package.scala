@@ -13,7 +13,7 @@ package object scalablitz {
       require(i >= 0 && i < self.size)
       Conc.apply(self, i)
     }
-    def foreach(f: T => Unit) = Conc.foreach(self, f)
+    def foreach[U](f: T => U) = Conc.foreach(self, f)
     def <>(that: Conc[T]) = Conc.concatTop(self, that)
   }
 
@@ -26,6 +26,6 @@ package object scalablitz {
       require(i >= 0 && i <= self.size)
       Conc.insert(self, i, y)
     }
-    def +(y: T) = Conc.appendTop(self, Conc.Single(y))
+    def :+(y: T) = Conc.appendTop(self, Conc.Single(y))
   }
 }

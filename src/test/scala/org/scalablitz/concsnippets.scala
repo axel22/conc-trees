@@ -91,7 +91,7 @@ trait ConcSnippets {
 
   def testAppendCorrectness(size: Int, appends: Int) = {
     var xs = concList(0 until size)
-    for (i <- 0 until appends) xs = xs + i
+    for (i <- 0 until appends) xs = xs :+ i
 
     val same = toSeq(xs) == ((0 until size) ++ (0 until appends))
     val sameNorm = toSeq(xs.normalized) == ((0 until size) ++ (0 until appends))
@@ -100,7 +100,7 @@ trait ConcSnippets {
 
   def testAppendBalance(size: Int, appends: Int) = {
     var xs = concList(0 until size)
-    for (i <- 0 until appends) xs = xs + i
+    for (i <- 0 until appends) xs = xs :+ i
 
     checkInvs(xs) && checkInvs(xs.normalized)
   }
