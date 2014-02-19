@@ -28,8 +28,8 @@ object Conc {
   /* data types */
 
   sealed trait Leaf[T] extends Conc[T] {
-    def left = throw new UnsupportedOperationException
-    def right = throw new UnsupportedOperationException
+    def left = throw new UnsupportedOperationException("Leaves do not have children.")
+    def right = throw new UnsupportedOperationException("Leaves do not have children.")
   }
   
   case object Empty extends Leaf[Nothing] {
@@ -78,6 +78,62 @@ object Conc {
       pack()
       conc
     }
+  }
+
+  case class Lazy[T](var evaluateTail: () => Queue[T]) extends Conc[T] {
+    lazy val tail: Queue[T] = {
+      val t = evaluateTail()
+      evaluateTail = null
+      t
+    }
+    def left = tail.left
+    def right = tail.right
+    def level = tail.level
+    def size = tail.size
+  }
+
+  case class Queue[T](leftLazy: Lazy[T], leftSide: Num[T], tail: Num[T], rightSide: Num[T], rightLazy: Lazy[T]) extends Conc[T] {
+    def left = leftSide
+    def right = new <>(tail, rightSide)
+    val level: Int = 1 + math.max(leftSide.level, math.max(tail.level, rightSide.level))
+    val size: Int = leftSide.size + tail.size + rightSide.size
+  }
+
+  sealed abstract class Num[+T] extends Conc[T]
+
+  case object Zero extends Num[Nothing] {
+    def left = throw new UnsupportedOperationException("Zero does not have children.")
+    def right = throw new UnsupportedOperationException("Zero does not have children.")
+    def level: Int = 0
+    def size: Int = 0
+  }
+
+  case class One[T](_1: Conc[T]) extends Num[T] {
+    def left = _1
+    def right = Zero
+    def level: Int = 1 + _1.level
+    def size: Int = _1.size
+  }
+
+  case class Two[T](_1: Conc[T], _2: Conc[T]) extends Num[T] {
+    def left = _1
+    def right = _2
+    def level: Int = 1 + math.max(_1.level, _2.level)
+    def size: Int = _1.size + _2.size
+  }
+
+  case class Three[T](_1: Conc[T], _2: Conc[T], _3: Conc[T]) extends Num[T] {
+    def left = _1
+    def right = new <>(_2, _3)
+    def level: Int = 1 + math.max(math.max(_1.level, _2.level), _3.level)
+    def size: Int = _1.size + _2.size + _3.size
+  }
+
+  case class Four[T](_1: Conc[T], _2: Conc[T], _3: Conc[T], _4: Conc[T]) extends Num[T] {
+    def left = new <>(_1, _2)
+    def right = new <>(_3, _4)
+    def level: Int = 1 + math.max(math.max(_1.level, _2.level), math.max(_3.level, _4.level))
+    def size: Int = _1.size + _2.size + _3.size + _4.size
   }
   
   /* operations */

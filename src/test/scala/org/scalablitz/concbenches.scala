@@ -116,7 +116,7 @@ class ConcBenches extends PerformanceTest.OfflineReport {
   }
 
   performance of "concat" config(opts) in {
-    using(concs(300000, 1500000) zip concs(3000, 30000).rename("size" -> "thatSize")) curve("ConcList") in { case (conc, thatConc) =>
+    using(concs(300000, 1500000) zip concs(3000, 300000).rename("size" -> "thatSize")) curve("ConcList") in { case (conc, thatConc) =>
       var i = 0
       while (i < 10000) {
         conc <> thatConc
@@ -124,7 +124,7 @@ class ConcBenches extends PerformanceTest.OfflineReport {
       }
     }
 
-    using(ropes(128, 300000, 1500000) zip concs(3000, 30000).rename("size" -> "thatSize")) curve("Conc.Buffer(128)") in { case (rope, thatRope) =>
+    using(ropes(128, 300000, 1500000) zip concs(3000, 300000).rename("size" -> "thatSize")) curve("Conc.Buffer(128)") in { case (rope, thatRope) =>
       var i = 0
       while (i < 10000) {
         rope <> thatRope
