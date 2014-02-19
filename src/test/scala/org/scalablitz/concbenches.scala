@@ -115,6 +115,37 @@ class ConcBenches extends PerformanceTest.OfflineReport {
 
   }
 
+  performance of "concat" config(opts) in {
+    using(concs(300000, 1500000) zip concs(3000, 30000).rename("size" -> "thatSize")) curve("ConcList") in { case (conc, thatConc) =>
+      var i = 0
+      while (i < 10000) {
+        conc <> thatConc
+        i += 1
+      }
+    }
+
+    using(ropes(128, 300000, 1500000) zip concs(3000, 30000).rename("size" -> "thatSize")) curve("Conc.Buffer(128)") in { case (rope, thatRope) =>
+      var i = 0
+      while (i < 10000) {
+        rope <> thatRope
+        i += 1
+      }
+    }
+
+    using(vectors(300, 1500) zip vectors(30, 150).rename("size" -> "thatSize")) curve("Vector") config(
+      exec.minWarmupRuns -> 1,
+      exec.maxWarmupRuns -> 1,
+      exec.benchRuns -> 2,
+      exec.independentSamples -> 1
+    ) in { case (vector, thatVector) =>
+      var i = 0
+      while (i < 10000) {
+        vector ++ thatVector
+        i += 1
+      }
+    }
+  }
+
 }
 
 
