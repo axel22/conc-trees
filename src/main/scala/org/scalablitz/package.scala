@@ -26,6 +26,6 @@ package object scalablitz {
       require(i >= 0 && i <= self.size)
       Conc.insert(self, i, y)
     }
-    def :+(y: T) = Conc.appendTop(self, Conc.Single(y))
+    def :+(y: T) = Conc.appendTop(self, new Conc.Single(y))
   }
 }

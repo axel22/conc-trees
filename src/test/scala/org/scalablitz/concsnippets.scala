@@ -12,7 +12,7 @@ trait ConcSnippets {
   def concList[T](elems: Seq[T]): Conc[T] = {
     var xs: Conc[T] = Empty
     for (x <- elems) {
-      xs <>= Single(x)
+      xs <>= new Single(x)
     }
     xs
   }

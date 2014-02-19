@@ -8,17 +8,17 @@ import org.scalameter.api._
 
 
 
-class ConcBenches extends PerformanceTest.Regression with Serializable {
+class ConcBenches extends PerformanceTest.OfflineReport {
 
-  def persistor = Persistor.None
+  override def historian = org.scalameter.reporting.RegressionReporter.Historian.Complete()
 
-  def sizes(from: Int, until: Int) = Gen.range("size")(from, until, (until - from) / 5)
+  def sizes(from: Int, until: Int) = Gen.range("size")(from, until, (until - from) / 4)
 
   def concs(from: Int, until: Int) = for {
     size <- sizes(from, until)
   } yield {
     var xs: Conc[Int] = Empty
-    for (x <- 0 until size) xs <>= Single(x)
+    for (x <- 0 until size) xs <>= new Single(x)
     xs
   }
 
@@ -27,7 +27,7 @@ class ConcBenches extends PerformanceTest.Regression with Serializable {
   } yield {
     val xs = new Conc.Buffer[Int](k)
     for (x <- 0 until size) xs += x
-    xs.toConc
+    xs.extractConc()
   }
 
   def lists(from: Int, until: Int) = for {
@@ -39,7 +39,9 @@ class ConcBenches extends PerformanceTest.Regression with Serializable {
   } yield (0 until size).toVector
 
   val opts = Context(
-    exec.independentSamples -> 1
+    exec.minWarmupRuns -> 60,
+    exec.maxWarmupRuns -> 120,
+    exec.independentSamples -> 3
   )
 
   performance of "foreach" config(opts) in {
@@ -47,16 +49,16 @@ class ConcBenches extends PerformanceTest.Regression with Serializable {
       conc.foreach(x => {})
     }
 
-    using(ropes(50, 30000, 150000)) curve("ConcRope") in { rope =>
-      rope.foreach(x => {})
-    }
-
     using(lists(30000, 150000)) curve("List") in { list =>
       list.foreach(x => {})
     }
 
-    using(vectors(30000, 150000)) curve("Vector") in { vector =>
+    using(vectors(300000, 1500000)) curve("Vector") in { vector =>
       vector.foreach(x => {})
+    }
+
+    using(ropes(128, 300000, 1500000)) curve("Conc.Buffer(128)") in { rope =>
+      rope.foreach(x => {})
     }
   }
 
@@ -90,6 +92,31 @@ class ConcBenches extends PerformanceTest.Regression with Serializable {
       }
       xs
     }
+
+    using(sizes(300000, 1500000)) curve("Conc.Buffer(128)") in { sz =>
+      val xs = new Conc.Buffer[Int](128)
+      var i = 0
+      while (i < sz) {
+        xs += i
+        i += 1
+      }
+      xs
+    }
+
+    using(sizes(300000, 1500000)) curve("VectorBuilder") in { sz =>
+      val xs = new collection.immutable.VectorBuilder[String]()
+      var i = 0
+      while (i < sz) {
+        xs += ""
+        i += 1
+      }
+      xs
+    }
+
   }
 
 }
+
+
+
+

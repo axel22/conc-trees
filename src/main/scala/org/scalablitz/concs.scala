@@ -3,11 +3,12 @@ package org.scalablitz
 
 
 import scala.annotation.unchecked
+import scala.annotation.tailrec
 import scala.reflect.ClassTag
 
 
 
-sealed abstract class Conc[+T] {
+sealed trait Conc[@specialized(Byte, Char, Int, Long, Float, Double) +T] {
   def level: Int
   def size: Int
   def left: Conc[T]
@@ -16,7 +17,7 @@ sealed abstract class Conc[+T] {
 }
 
 
-case class <>[T](left: Conc[T], right: Conc[T]) extends Conc[T] {
+case class <>[+T](left: Conc[T], right: Conc[T]) extends Conc[T] {
   val level = 1 + math.max(left.level, right.level)
   val size = left.size + right.size
 }
@@ -26,7 +27,7 @@ object Conc {
 
   /* data types */
 
-  sealed abstract class Leaf[T] extends Conc[T] {
+  sealed trait Leaf[T] extends Conc[T] {
     def left = throw new UnsupportedOperationException
     def right = throw new UnsupportedOperationException
   }
@@ -36,12 +37,12 @@ object Conc {
     def size = 0
   }
   
-  case class Single[T](x: T) extends Leaf[T] {
+  class Single[@specialized(Byte, Char, Int, Long, Float, Double) T](val x: T) extends Leaf[T] {
     def level = 0
     def size = 1
   }
   
-  case class Chunk[T](array: Array[T], size: Int, k: Int) extends Leaf[T] {
+  class Chunk[@specialized(Byte, Char, Int, Long, Float, Double) T](val array: Array[T], val size: Int, val k: Int) extends Leaf[T] {
     def level = 0
   }
 
@@ -51,29 +52,29 @@ object Conc {
     override def normalized = wrap(this, Empty)
   }
 
-  class Buffer[T: ClassTag](val k: Int) {
+  class Buffer[@specialized(Byte, Char, Int, Long, Float, Double) T: ClassTag](val k: Int) {
     private var conc: Conc[T] = Empty
-    private var chunk: Array[T] = new Array[T](k)
-    private var pos: Int = 0
+    private var chunk: Array[T] = new Array(k)
+    private var lastSize: Int = 0
 
-    def +=(elem: T): this.type = if (pos < k) {
-      chunk(pos) = elem
-      pos += 1
+    final def +=(elem: T): this.type = {
+      if (lastSize >= k) expand()
+      chunk(lastSize) = elem
+      lastSize += 1
       this
-    } else nextChunk(elem)
+    }
 
     private def pack() {
-      conc = appendTop(conc, new Chunk(chunk, pos, k))
+      conc = appendTop(conc, new Chunk(chunk, lastSize, k))
     }
 
-    private def nextChunk(elem: T): this.type = {
+    private def expand() {
       pack()
-      chunk = new Array[T](k)
-      pos = 0
-      this += elem
+      chunk = new Array(k)
+      lastSize = 0
     }
 
-    def toConc: Conc[T] = {
+    def extractConc(): Conc[T] = {
       pack()
       conc
     }
@@ -81,13 +82,15 @@ object Conc {
   
   /* operations */
 
-  def foreach[T, U](xs: Conc[T], f: T => U): Unit = (xs: @unchecked) match {
+  def foreach[@specialized(Byte, Char, Int, Long, Float, Double) T, @specialized(Byte, Char, Int, Long, Float, Double) U](xs: Conc[T], f: T => U): Unit = (xs: @unchecked) match {
     case left <> right =>
       foreach(left, f)
       foreach(right, f)
-    case Single(x) =>
-      f(x)
-    case Chunk(a, sz, _) =>
+    case s: Single[T] =>
+      f(s.x)
+    case c: Chunk[T] =>
+      val a = c.array
+      val sz = c.size
       var i = 0
       while (i < sz) {
         f(a(i))
@@ -99,13 +102,13 @@ object Conc {
       foreach(right, f)
   }
 
-  def apply[T](xs: Conc[T], i: Int): T = (xs: @unchecked) match {
+  def apply[@specialized(Byte, Char, Int, Long, Float, Double) T](xs: Conc[T], i: Int): T = (xs: @unchecked) match {
     case left <> _ if i < left.size =>
       apply(left, i)
     case left <> right =>
       apply(right, i - left.size)
-    case Single(x) => x
-    case Chunk(a, _, _) => a(i)
+    case s: Single[T] => s.x
+    case c: Chunk[T] => c.array(i)
     case Append(left, _) if i < left.size =>
       apply(left, i)
     case Append(left, right) =>
@@ -119,16 +122,16 @@ object Conc {
     na
   }
 
-  def update[T: ClassTag](xs: Conc[T], i: Int, y: T): Conc[T] = (xs.normalized: @unchecked) match {
+  def update[@specialized(Byte, Char, Int, Long, Float, Double) T: ClassTag](xs: Conc[T], i: Int, y: T): Conc[T] = (xs.normalized: @unchecked) match {
     case left <> right if i < left.size =>
       new <>(update(left, i, y), right)
     case left <> right =>
       val ni = i - left.size
       new <>(left, update(right, ni, y))
-    case Single(x) =>
-      Single(y)
-    case Chunk(a: Array[T], sz, k) =>
-      Chunk(updatedArray(a, i, y, sz), sz, k)
+    case s: Single[T] =>
+      new Single(y)
+    case c: Chunk[T] =>
+      new Chunk(updatedArray(c.array, i, y, c.size), c.size, c.k)
   }
 
   def concatTop[T](xs: Conc[T], ys: Conc[T]) = {
@@ -175,38 +178,44 @@ object Conc {
     na
   }
 
-  def insert[T: ClassTag](xs: Conc[T], i: Int, y: T): Conc[T] = (xs.normalized: @unchecked) match {
+  def insert[@specialized(Byte, Char, Int, Long, Float, Double) T: ClassTag](xs: Conc[T], i: Int, y: T): Conc[T] = (xs.normalized: @unchecked) match {
     case left <> right if i < left.size =>
       insert(left, i, y) <> right
     case left <> right =>
       left <> insert(right, i - left.size, y)
-    case Single(x) =>
-      if (i == 0) new <>(Single(y), xs)
-      else new <>(xs, Single(y))
-    case Chunk(a: Array[T], sz, k) if sz == k =>
+    case s: Single[T] =>
+      if (i == 0) new <>(new Single(y), xs)
+      else new <>(xs, new Single(y))
+    case c: Chunk[T] if c.size == c.k =>
+      val a = c.array
+      val sz = c.size
+      val k = c.k
       if (i < k / 2) {
         val la = insertedArray(a, 0, i, y, k / 2)
         val ra = copiedArray(a, k / 2, k - k / 2)
-        new <>(Chunk(la, k / 2 + 1, k), Chunk(ra, k - k / 2, k))
+        new <>(new Chunk(la, k / 2 + 1, k), new Chunk(ra, k - k / 2, k))
       } else {
         val la = copiedArray(a, 0, k / 2)
         val ra = insertedArray(a, k / 2, i - k / 2, y, k - k / 2 + 1)
-        new <>(Chunk(la, k / 2, k), Chunk(ra, k - k / 2 + 1, k))
+        new <>(new Chunk(la, k / 2, k), new Chunk(ra, k - k / 2 + 1, k))
       }
-    case Chunk(a: Array[T], sz, k) =>
-      Chunk(insertedArray(a, 0, i, y, sz), sz + 1, k)
+    case c: Chunk[T] =>
+      val a = c.array
+      val sz = c.size
+      val k = c.k
+      new Chunk(insertedArray(a, 0, i, y, sz), sz + 1, k)
     case Empty =>
-      Single(y)
+      new Single(y)
   }
 
   def appendTop[T](xs: Conc[T], ys: Leaf[T]): Conc[T] = (xs: @unchecked) match {
+    case xs: Append[T] => append(xs, ys)
+    case _ <> _ => new Append(xs, ys)
     case Empty => ys
     case xs: Leaf[T] => new <>(xs, ys)
-    case _ <> _ => new Append(xs, ys)
-    case xs: Append[T] => append(xs, ys)
   }
 
-  private def append[T](xs: Append[T], ys: Conc[T]): Conc[T] = {
+  @tailrec private def append[T](xs: Append[T], ys: Conc[T]): Conc[T] = {
     if (xs.right.level > ys.level) new Append(xs, ys)
     else {
       val zs = new <>(xs.right, ys)
