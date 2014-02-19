@@ -52,7 +52,9 @@ object Conc {
     override def normalized = wrap(this, Empty)
   }
 
-  case class Lazy[T](var evaluateTail: () => Queue[T]) extends Conc[T] {
+  sealed abstract class Queue[+T] extends Conc[T]
+
+  case class Lazy[T](var evaluateTail: () => Queue[T]) extends Queue[T] {
     lazy val tail: Queue[T] = {
       val t = evaluateTail()
       evaluateTail = null
@@ -64,7 +66,7 @@ object Conc {
     def size = tail.size
   }
 
-  case class Queue[T](leftLazy: Lazy[T], leftSide: Num[T], tail: Num[T], rightSide: Num[T], rightLazy: Lazy[T]) extends Conc[T] {
+  case class Spine[T](leftLazy: Lazy[T], leftSide: Num[T], tail: Num[T], rightSide: Num[T], rightLazy: Lazy[T]) extends Queue[T] {
     def left = leftSide
     def right = new <>(tail, rightSide)
     val level: Int = 1 + math.max(leftSide.level, math.max(tail.level, rightSide.level))
