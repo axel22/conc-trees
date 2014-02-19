@@ -25,7 +25,7 @@ class ConcBenches extends PerformanceTest.OfflineReport {
   def ropes(k: Int, from: Int, until: Int) = for {
     size <- sizes(from, until)
   } yield {
-    val xs = new Conc.Buffer[Int](k)
+    val xs = new ConcBuffer[Int](k)
     for (x <- 0 until size) xs += x
     xs.extractConc()
   }
@@ -94,7 +94,7 @@ class ConcBenches extends PerformanceTest.OfflineReport {
     }
 
     using(sizes(300000, 1500000)) curve("Conc.Buffer(128)") in { sz =>
-      val xs = new Conc.Buffer[Int](128)
+      val xs = new ConcBuffer[Int](128)
       var i = 0
       while (i < sz) {
         xs += i

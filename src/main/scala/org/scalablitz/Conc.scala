@@ -52,34 +52,6 @@ object Conc {
     override def normalized = wrap(this, Empty)
   }
 
-  class Buffer[@specialized(Byte, Char, Int, Long, Float, Double) T: ClassTag](val k: Int) {
-    private var conc: Conc[T] = Empty
-    private var chunk: Array[T] = new Array(k)
-    private var lastSize: Int = 0
-
-    final def +=(elem: T): this.type = {
-      if (lastSize >= k) expand()
-      chunk(lastSize) = elem
-      lastSize += 1
-      this
-    }
-
-    private def pack() {
-      conc = appendTop(conc, new Chunk(chunk, lastSize, k))
-    }
-
-    private def expand() {
-      pack()
-      chunk = new Array(k)
-      lastSize = 0
-    }
-
-    def extractConc(): Conc[T] = {
-      pack()
-      conc
-    }
-  }
-
   case class Lazy[T](var evaluateTail: () => Queue[T]) extends Conc[T] {
     lazy val tail: Queue[T] = {
       val t = evaluateTail()
