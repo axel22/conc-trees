@@ -52,10 +52,10 @@ object Conc {
     override def normalized = wrap(this, Empty)
   }
 
-  sealed abstract class Queue[+T] extends Conc[T]
+  sealed abstract class Conqueue[+T] extends Conc[T]
 
-  case class Lazy[T](var evaluateTail: () => Queue[T]) extends Queue[T] {
-    lazy val tail: Queue[T] = {
+  case class Lazy[T](var evaluateTail: () => Conqueue[T]) extends Conqueue[T] {
+    lazy val tail: Conqueue[T] = {
       val t = evaluateTail()
       evaluateTail = null
       t
@@ -66,7 +66,7 @@ object Conc {
     def size = tail.size
   }
 
-  case class Spine[T](leftLazy: Lazy[T], leftSide: Num[T], tail: Num[T], rightSide: Num[T], rightLazy: Lazy[T]) extends Queue[T] {
+  case class Spine[T](leftLazy: Lazy[T], leftSide: Num[T], tail: Num[T], rightSide: Num[T], rightLazy: Lazy[T]) extends Conqueue[T] {
     def left = leftSide
     def right = new <>(tail, rightSide)
     val level: Int = 1 + math.max(leftSide.level, math.max(tail.level, rightSide.level))
@@ -466,6 +466,30 @@ object Conc {
       val nr = new <>(nrl, nrr)
       new <>(nl, nr)
     }
+  }
+
+  def pushHead[T](conq: Conqueue[T], elem: Leaf[T]): Conqueue[T] = {
+    ???
+  }
+
+  def popHead[T](conq: Conqueue[T]): Conqueue[T] = {
+    ???
+  }
+
+  def head[T](conq: Conqueue[T]): Leaf[T] = {
+    ???
+  }
+
+  def pushLast[T](conq: Conqueue[T], elem: T): Conqueue[T] = {
+    ???
+  }
+
+  def popLast[T](conq: Conqueue[T]): Conqueue[T] = {
+    ???
+  }
+
+  def last[T](conq: Conqueue[T]): Leaf[T] = {
+    ???
   }
 
 }
