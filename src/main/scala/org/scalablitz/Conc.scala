@@ -529,7 +529,14 @@ object Conc {
   }
 
   def pushHead[T](conq: Conqueue[T], elem: Leaf[T]): Conqueue[T] = {
-    ???
+    (conq: @unchecked) match {
+      case Spine(ll, left, tail, right, rl) =>
+        ???
+      case Tip(tip) =>
+        ???
+      case l: Lazy[T] =>
+        pushHead(l.tail, elem)
+    }
   }
 
   def popHead[T](conq: Conqueue[T]): Conqueue[T] = {
@@ -538,9 +545,9 @@ object Conc {
 
   def head[T](conq: Conqueue[T]): Leaf[T] = {
     @tailrec def leftmost(c: Conc[T]): Leaf[T] = c match {
+      case Empty => unsupported("empty")
       case l: Leaf[T] => l
       case _ <> _ => leftmost(c.left)
-      case Zero => unsupported("empty")
       case _ => invalid("Invalid conqueue state.")
     }
 
