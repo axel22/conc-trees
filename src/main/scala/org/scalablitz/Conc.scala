@@ -25,11 +25,15 @@ case class <>[+T](left: Conc[T], right: Conc[T]) extends Conc[T] {
 
 object Conc {
 
+  def invalid(msg: String) = throw new IllegalStateException(msg)
+
+  def unsupported(msg: String) = throw new UnsupportedOperationException(msg)
+
   /* data types */
 
   sealed trait Leaf[T] extends Conc[T] {
-    def left = throw new UnsupportedOperationException("Leaves do not have children.")
-    def right = throw new UnsupportedOperationException("Leaves do not have children.")
+    def left = unsupported("Leaves do not have children.")
+    def right = unsupported("Leaves do not have children.")
   }
   
   case object Empty extends Leaf[Nothing] {
@@ -40,10 +44,12 @@ object Conc {
   class Single[@specialized(Byte, Char, Int, Long, Float, Double) T](val x: T) extends Leaf[T] {
     def level = 0
     def size = 1
+    override def toString = s"Single($x)"
   }
   
   class Chunk[@specialized(Byte, Char, Int, Long, Float, Double) T](val array: Array[T], val size: Int, val k: Int) extends Leaf[T] {
     def level = 0
+    override def toString = s"Chunk(${array.take(5).mkString(", ")}, size, k)"
   }
 
   case class Append[+T](left: Conc[T], right: Conc[T]) extends Conc[T] {
@@ -54,7 +60,7 @@ object Conc {
 
   sealed abstract class Conqueue[+T] extends Conc[T]
 
-  case class Lazy[T](var evaluateTail: () => Conqueue[T]) extends Conqueue[T] {
+  class Lazy[T](var evaluateTail: () => Conqueue[T]) extends Conqueue[T] {
     lazy val tail: Conqueue[T] = {
       val t = evaluateTail()
       evaluateTail = null
@@ -66,18 +72,30 @@ object Conc {
     def size = tail.size
   }
 
-  case class Spine[T](leftLazy: Lazy[T], leftSide: Num[T], tail: Num[T], rightSide: Num[T], rightLazy: Lazy[T]) extends Conqueue[T] {
+  case class Spine[T](leftLazy: Lazy[T], leftSide: Num[T], tail: Conqueue[T], rightSide: Num[T], rightLazy: Lazy[T]) extends Conqueue[T] {
     def left = leftSide
     def right = new <>(tail, rightSide)
     val level: Int = 1 + math.max(leftSide.level, math.max(tail.level, rightSide.level))
     val size: Int = leftSide.size + tail.size + rightSide.size
   }
 
-  sealed abstract class Num[+T] extends Conc[T]
+  case class Tip[T](tip: Num[T]) extends Conqueue[T] {
+    def left = tip.left
+    def right = tip.right
+    def level = tip.level
+    def size = tip.size
+  }
+
+  sealed abstract class Num[+T] extends Conc[T] {
+    def leftmost: Conc[T]
+    def rightmost: Conc[T]
+  }
 
   case object Zero extends Num[Nothing] {
-    def left = throw new UnsupportedOperationException("Zero does not have children.")
-    def right = throw new UnsupportedOperationException("Zero does not have children.")
+    def left = unsupported("Zero does not have children.")
+    def right = unsupported("Zero does not have children.")
+    def leftmost = unsupported("empty")
+    def rightmost = unsupported("empty")
     def level: Int = 0
     def size: Int = 0
   }
@@ -85,6 +103,8 @@ object Conc {
   case class One[T](_1: Conc[T]) extends Num[T] {
     def left = _1
     def right = Zero
+    def leftmost = _1
+    def rightmost = _1
     def level: Int = 1 + _1.level
     def size: Int = _1.size
   }
@@ -92,6 +112,8 @@ object Conc {
   case class Two[T](_1: Conc[T], _2: Conc[T]) extends Num[T] {
     def left = _1
     def right = _2
+    def leftmost = _1
+    def rightmost = _2
     def level: Int = 1 + math.max(_1.level, _2.level)
     def size: Int = _1.size + _2.size
   }
@@ -99,6 +121,8 @@ object Conc {
   case class Three[T](_1: Conc[T], _2: Conc[T], _3: Conc[T]) extends Num[T] {
     def left = _1
     def right = new <>(_2, _3)
+    def leftmost = _1
+    def rightmost = _3
     def level: Int = 1 + math.max(math.max(_1.level, _2.level), _3.level)
     def size: Int = _1.size + _2.size + _3.size
   }
@@ -106,11 +130,44 @@ object Conc {
   case class Four[T](_1: Conc[T], _2: Conc[T], _3: Conc[T], _4: Conc[T]) extends Num[T] {
     def left = new <>(_1, _2)
     def right = new <>(_3, _4)
+    def leftmost = _1
+    def rightmost = _4
     def level: Int = 1 + math.max(math.max(_1.level, _2.level), math.max(_3.level, _4.level))
     def size: Int = _1.size + _2.size + _3.size + _4.size
   }
   
   /* operations */
+
+  def queueString[T](conq: Conqueue[T]): String = {
+    val buffer = new StringBuffer
+
+    def str(num: Num[T]): String = num match {
+      case Zero => "Zero"
+      case One(_1) => s"One(${_1.level})"
+      case Two(_1, _2) => s"Two(${_1.level}, ${_2.level})"
+      case Three(_1, _2, _3) => s"Three(${_1.level}, ${_2.level}, ${_3.level})"
+      case Four(_1, _2, _3, _4) => s"Four(${_1.level}, ${_2.level}, ${_3.level}, ${_4.level})"
+    }
+
+    def traverse(rank: Int, indent: Int, conq: Conqueue[T]): Unit = (conq: @unchecked) match {
+      case l: Lazy[T] =>
+        val lazys = "  Lazy(+) "
+        buffer.append(" " * (indent) + lazys)
+      case Spine(_, leftSide, tail, rightSide, _) =>
+        val lefts = str(leftSide)
+        val rights = str(rightSide)
+        val spines = "Spine(+)"
+        buffer.append(" " * (indent - lefts.length) + lefts + " " + spines + " " + rights)
+        buffer.append("\n")
+        traverse(rank + 1, indent, tail)
+      case Tip(tip) =>
+        val tips = s"Tip(${str(tip)})"
+        buffer.append(" " * (indent) + tips)
+    }
+
+    traverse(0, 40, conq)
+    buffer.toString
+  }
 
   def foreach[@specialized(Byte, Char, Int, Long, Float, Double) T, @specialized(Byte, Char, Int, Long, Float, Double) U](xs: Conc[T], f: T => U): Unit = (xs: @unchecked) match {
     case left <> right =>
@@ -130,6 +187,9 @@ object Conc {
     case Append(left, right) =>
       foreach(left, f)
       foreach(right, f)
+    case conc: Conc[T] =>
+      foreach(conc.left, f)
+      foreach(conc.right, f)
   }
 
   def apply[@specialized(Byte, Char, Int, Long, Float, Double) T](xs: Conc[T], i: Int): T = (xs: @unchecked) match {
@@ -477,7 +537,21 @@ object Conc {
   }
 
   def head[T](conq: Conqueue[T]): Leaf[T] = {
-    ???
+    @tailrec def leftmost(c: Conc[T]): Leaf[T] = c match {
+      case l: Leaf[T] => l
+      case _ <> _ => leftmost(c.left)
+      case Zero => unsupported("empty")
+      case _ => invalid("Invalid conqueue state.")
+    }
+
+    (conq: @unchecked) match {
+      case Spine(ll, left, tail, right, rl) =>
+        leftmost(left.leftmost)
+      case Tip(tip) =>
+        leftmost(tip.leftmost)
+      case l: Lazy[T] =>
+        head(l.tail)
+    }
   }
 
   def pushLast[T](conq: Conqueue[T], elem: T): Conqueue[T] = {
@@ -489,7 +563,21 @@ object Conc {
   }
 
   def last[T](conq: Conqueue[T]): Leaf[T] = {
-    ???
+    @tailrec def rightmost(c: Conc[T]): Leaf[T] = c match {
+      case Empty => unsupported("empty")
+      case l: Leaf[T] => l
+      case _ <> _ => rightmost(c.right)
+      case _ => invalid("Invalid conqueue state: " + c.getClass.getSimpleName)
+    }
+
+    (conq: @unchecked) match {
+      case Spine(ll, left, tail, right, rl) =>
+        rightmost(right.rightmost)
+      case Tip(tip) =>
+        rightmost(tip.rightmost)
+      case l: Lazy[T] =>
+        last(l.tail)
+    }
   }
 
 }
