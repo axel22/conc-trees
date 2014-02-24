@@ -165,6 +165,33 @@ object ConcChecks extends Properties("Conc") with ConcSnippets {
     (s"Correctly prepended." |: toSeq(pushed) == ((0 until n).map(-_).reverse ++ toSeq(conq)))
   }
 
+  property("conqueue pushLastTop") = forAll(queues(9)) { conq =>
+    val pushed = ConcOps.pushLastTop(conq, new Single(-1))
+    //println(ConcOps.queueString(conq))
+    //println("after:")
+    //println(ConcOps.queueString(pushed))
+    //println("--------------")
+    (s"Last is the value just pushed." |: ConcOps.last(pushed).asInstanceOf[Single[Int]].x == -1) &&
+    (s"Invariants are met." |: checkConqueueInvs(pushed, 0)) &&
+    (s"" |: toSeq(pushed) == (toSeq(conq) :+ -1))
+  }
+
+  property("conqueue pushLastTop many times") = forAll(queues(9), choose(1, 10000)) { (conq, n) =>
+    var pushed = conq
+    for (i <- 0 until n) {
+      var units = 0
+      pushed = ConcOps.pushLastTop(pushed, new Single(-i), () => units += 1)
+      //println("Work done: " + units)
+    }
+    //println("n = " + n)
+    //println(ConcOps.queueString(conq))
+    //println("after:")
+    //println(ConcOps.queueString(pushed))
+    //println("--------------")
+    (s"Invariants are met." |: checkConqueueInvs(pushed, 0)) &&
+    (s"Correctly appended." |: toSeq(pushed) == (toSeq(conq) ++ (0 until n).map(-_)))
+  }
+
   property("lazy conqueue pushHeadTop constant work") = forAll(lazyQueues(9), choose(1, 10000)) { (lazyq, n) =>
     var pushed: Conqueue[Int] = lazyq
     val workHistory = for (i <- 0 until n) yield {
@@ -176,6 +203,19 @@ object ConcChecks extends Properties("Conc") with ConcSnippets {
     (s"Most work ever done less than 4: $mostWork" |: mostWork <= 4) &&
     (s"Invariants are met." |: checkConqueueInvs(pushed, 0)) &&
     (s"Correctly prepended." |: toSeq(pushed) == ((0 until n).map(-_).reverse ++ toSeq(lazyq)))
+  }
+
+  property("lazy conqueue pushLastTop constant work") = forAll(lazyQueues(9), choose(1, 10000)) { (lazyq, n) =>
+    var pushed: Conqueue[Int] = lazyq
+    val workHistory = for (i <- 0 until n) yield {
+      var units = 0
+      pushed = ConcOps.pushLastTop(pushed, new Single(-i), () => units += 1)
+      units
+    }
+    val mostWork = workHistory.max
+    (s"Most work ever done less than 4: $mostWork" |: mostWork <= 4) &&
+    (s"Invariants are met." |: checkConqueueInvs(pushed, 0)) &&
+    (s"Correctly appended." |: toSeq(pushed) == (toSeq(lazyq) ++ (0 until n).map(-_)))
   }
 
 }

@@ -602,17 +602,15 @@ object ConcOps {
           new Spine(noCarryPushHead(s.lwing, c), s.rwing, s.tail)
         } else {
           val Three(_1, _2, _3) = s.lwing
-          val nleft = Two(c, _1)
+          val nlwing = Two(c, _1)
           val carry = _2 <> _3
           val ntail = (s.tail: @unchecked) match {
-            case st: Spine[T] =>
-              if (st.lwing.index < 3) pushHead(s.tail, carry, onPush)
-              else if (st.lwing.index == 3) () => pushHead(s.tail, carry, onPush)
-              else pushHead(s.tail, carry, onPush)
-            case Tip(_) =>
+            case st: Spine[T] if st.lwing.index == 3 =>
+              () => pushHead(s.tail, carry, onPush)
+            case _ =>
               pushHead(s.tail, carry, onPush)
           }
-          new Spine(nleft, s.rwing, ntail)
+          new Spine(nlwing, s.rwing, ntail)
         }
       case Tip(tip) =>
         if (tip.index < 3) {
@@ -654,8 +652,56 @@ object ConcOps {
     }
   }
 
-  def pushLast[T](conq: Conqueue[T], leaf: Leaf[T]): Conqueue[T] = {
-    ???
+  def pushLast[T](conq: Conqueue[T], c: Conc[T], onPush: () => Unit = doNothing): Conqueue[T] = {
+    def noCarryPushLast(num: Num[T], c: Conc[T]): Num[T] = (num.index: @switch) match {
+      case 0 =>
+        One(c)
+      case 1 =>
+        val One(_1) = num
+        Two(_1, c)
+      case 2 =>
+        val Two(_1, _2) = num
+        Three(_1, _2, c)
+      case _ =>
+        invalid("Causes a carry.")
+    }
+
+    onPush()
+
+    (conq: @unchecked) match {
+      case s: Spine[T] =>
+        if (s.rwing.index < 3) {
+          new Spine(s.lwing, noCarryPushLast(s.rwing, c), s.tail)
+        } else {
+          val Three(_1, _2, _3) = s.rwing
+          val nrwing = Two(_3, c)
+          val carry = _1 <> _2
+          val ntail = (s.tail: @unchecked) match {
+            case st: Spine[T] =>
+              () => pushLast(s.tail, carry, onPush)
+            case Tip(_) =>
+              pushLast(s.tail, carry, onPush)
+          }
+          new Spine(s.lwing, nrwing, ntail)
+        }
+      case Tip(tip) =>
+        if (tip.index < 3) {
+          Tip(noCarryPushLast(tip, c))
+        } else {
+          val Three(_1, _2, _3) = tip
+          new Spine(Two(_1, _2), Two(_3, c), Tip(Zero))
+        }
+    }
+  }
+
+  def pushLastTop[T](conq: Conqueue[T], leaf: Leaf[T], onPush: () => Unit = doNothing): Conqueue[T] = conq match {
+    case Conqueue.Lazy(lstack, queue, rstack) =>
+      val nqueue = pushLast(queue, leaf, onPush)
+      val nlstack = pay(lstack)
+      val nrstack = pay(nqueue.addIfUnevaluated(rstack))
+      Conqueue.Lazy(nlstack, nqueue, nrstack)
+    case _ =>
+      pushLast(conq, leaf, onPush)
   }
 
   def popLast[T](conq: Conqueue[T]): Conqueue[T] = {
