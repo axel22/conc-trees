@@ -73,6 +73,8 @@ sealed abstract class Conqueue[+T] extends Conc[T] {
 
 object Conqueue {
 
+  def empty = Tip(Zero)
+
   case class Lazy[+T](lstack: List[Spine[T]], queue: Conqueue[T], rstack: List[Spine[T]]) extends Conqueue[T] {
     def left = queue.left
     def right = queue.right

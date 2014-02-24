@@ -130,6 +130,11 @@ object ConcChecks extends Properties("Conc") with ConcSnippets {
     s"${ConcOps.queueString(conq)}\n: ${buffer.last} vs ${ConcOps.last(conq)}" |: buffer.last == ConcOps.last(conq).asInstanceOf[Single[Int]].x
   }
 
+  property("conqueue append from empty") = forAll(choose(0, 1000)) { n =>
+    val conq = Conqueue.empty
+    true
+  }
+
 }
 
 
