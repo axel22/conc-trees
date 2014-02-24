@@ -1,2 +1,6 @@
 target
 tmp
+
+# idea stuff
+.idea
+conc-trees.iml

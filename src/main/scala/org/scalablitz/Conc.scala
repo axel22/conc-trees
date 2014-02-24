@@ -97,8 +97,8 @@ object Conqueue {
     override def addIfUnevaluated[U >: T](stack: List[Conqueue.Spine[U]]) = if (!evaluated) this :: stack else stack
     def left = lwing
     def right = new <>(tail, rwing)
-    val level: Int = 1 + math.max(lwing.level, math.max(tail.level, rwing.level))
-    val size: Int = lwing.size + tail.size + rwing.size
+    lazy val level: Int = 1 + math.max(lwing.level, math.max(tail.level, rwing.level))
+    lazy val size: Int = lwing.size + tail.size + rwing.size
   }
 
   case class Tip[+T](tip: Num[T]) extends Conqueue[T] {
@@ -578,7 +578,9 @@ object ConcOps {
       Nil
   }
 
-  def pushHead[T](conq: Conqueue[T], c: Conc[T]): Conqueue[T] = {
+  val doNothing = () => {}
+
+  def pushHead[T](conq: Conqueue[T], c: Conc[T], onPush: () => Unit): Conqueue[T] = {
     def noCarryPushHead(num: Num[T], c: Conc[T]): Num[T] = (num.index: @switch) match {
       case 0 =>
         One(c)
@@ -592,6 +594,8 @@ object ConcOps {
         invalid("Causes a carry.")
     }
 
+    onPush()
+
     (conq: @unchecked) match {
       case s: Spine[T] =>
         if (s.lwing.index < 3) {
@@ -602,11 +606,11 @@ object ConcOps {
           val carry = _2 <> _3
           val ntail = (s.tail: @unchecked) match {
             case st: Spine[T] =>
-              if (st.lwing.index < 3) pushHead(s.tail, carry)
-              else if (st.lwing.index == 3) () => pushHead(s.tail, carry)
-              else pushHead(s.tail, carry)
+              if (st.lwing.index < 3) pushHead(s.tail, carry, onPush)
+              else if (st.lwing.index == 3) () => pushHead(s.tail, carry, onPush)
+              else pushHead(s.tail, carry, onPush)
             case Tip(_) =>
-              pushHead(s.tail, carry)
+              pushHead(s.tail, carry, onPush)
           }
           new Spine(nleft, s.rwing, ntail)
         }
@@ -620,14 +624,14 @@ object ConcOps {
     }
   }
 
-  def pushHeadTop[T](conq: Conqueue[T], leaf: Leaf[T]): Conqueue[T] = conq match {
+  def pushHeadTop[T](conq: Conqueue[T], leaf: Leaf[T], onPush: () => Unit = doNothing): Conqueue[T] = conq match {
     case Conqueue.Lazy(lstack, queue, rstack) =>
-      val nqueue = pushHead(queue, leaf)
+      val nqueue = pushHead(queue, leaf, onPush)
       val nlstack = pay(nqueue.addIfUnevaluated(lstack))
       val nrstack = pay(rstack)
       Conqueue.Lazy(nlstack, nqueue, nrstack)
     case _ =>
-      pushHead(conq, leaf)
+      pushHead(conq, leaf, onPush)
   }
 
   def popHead[T](conq: Conqueue[T]): Conqueue[T] = {

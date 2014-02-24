@@ -118,6 +118,10 @@ object ConcChecks extends Properties("Conc") with ConcSnippets {
     conqueue <- genConqueue(0, maxRank)
   } yield conqueue
 
+  def lazyQueues(rankLimit: Int) = for {
+    queue <- queues(rankLimit)
+  } yield Conqueue.Lazy(Nil, queue, Nil)
+
   property("conqueue invariants") = forAll(queues(5)) { conq =>
     checkConqueueInvs(conq, 0)
   }
@@ -134,8 +138,8 @@ object ConcChecks extends Properties("Conc") with ConcSnippets {
     s"${ConcOps.queueString(conq)}\n: ${buffer.last} vs ${ConcOps.last(conq)}" |: buffer.last == ConcOps.last(conq).asInstanceOf[Single[Int]].x
   }
 
-  property("conqueue append") = forAll(queues(5)) { conq =>
-    val pushed = ConcOps.pushHead(conq, new Single(-1))
+  property("conqueue pushHeadTop") = forAll(queues(5)) { conq =>
+    val pushed = ConcOps.pushHeadTop(conq, new Single(-1))
     //println(ConcOps.queueString(conq))
     //println("after:")
     //println(ConcOps.queueString(pushed))
@@ -145,9 +149,13 @@ object ConcChecks extends Properties("Conc") with ConcSnippets {
     (s"" |: toSeq(pushed) == (-1 +: toSeq(conq)))
   }
 
-  property("conqueue append many times") = forAll(queues(5), choose(1, 1000)) { (conq, n) =>
+  property("conqueue pushHeadTop many times") = forAll(queues(5), choose(1, 1000)) { (conq, n) =>
     var pushed = conq
-    for (i <- 0 until n) pushed = ConcOps.pushHead(pushed, new Single(-i))
+    for (i <- 0 until n) {
+      var units = 0
+      pushed = ConcOps.pushHeadTop(pushed, new Single(-i), () => units += 1)
+      //println("Work done: " + units)
+    }
     //println("n = " + n)
     //println(ConcOps.queueString(conq))
     //println("after:")
@@ -156,6 +164,20 @@ object ConcChecks extends Properties("Conc") with ConcSnippets {
     (s"Invariants are met." |: checkConqueueInvs(pushed, 0)) &&
     (s"Correctly prepended." |: toSeq(pushed) == ((0 until n).map(-_).reverse ++ toSeq(conq)))
   }
+
+  property("lazy conqueue pushHeadTop constant work") = forAll(lazyQueues(9), choose(1, 1000)) { (lazyq, n) =>
+    var pushed: Conqueue[Int] = lazyq
+    val workHistory = for (i <- 0 until n) yield {
+      var units = 0
+      pushed = ConcOps.pushHeadTop(pushed, new Single(-i), () => units += 1)
+      units
+    }
+    val mostWork = workHistory.max
+    (s"Most work ever done less than 4: $mostWork" |: mostWork <= 4) &&
+    (s"Invariants are met." |: checkConqueueInvs(pushed, 0)) &&
+    (s"Correctly prepended." |: toSeq(pushed) == ((0 until n).map(-_).reverse ++ toSeq(lazyq)))
+  }
+
 }
 
 
