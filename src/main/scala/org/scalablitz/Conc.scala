@@ -4,6 +4,7 @@ package org.scalablitz
 
 import scala.annotation.unchecked
 import scala.annotation.tailrec
+import scala.annotation.switch
 import scala.reflect.ClassTag
 
 
@@ -24,12 +25,6 @@ case class <>[+T](left: Conc[T], right: Conc[T]) extends Conc[T] {
 
 
 object Conc {
-
-  def invalid(msg: String) = throw new IllegalStateException(msg)
-
-  def unsupported(msg: String) = throw new UnsupportedOperationException(msg)
-
-  /* data types */
 
   sealed trait Leaf[T] extends Conc[T] {
     def left = unsupported("Leaves do not have children.")
@@ -52,43 +47,71 @@ object Conc {
     override def toString = s"Chunk(${array.take(5).mkString(", ")}, size, k)"
   }
 
-  case class Append[+T](left: Conc[T], right: Conc[T]) extends Conc[T] {
+}
+
+
+sealed abstract class ConcRope[+T] extends Conc[T]
+
+
+object ConcRope {
+
+  case class Append[+T](left: Conc[T], right: Conc[T]) extends ConcRope[T] {
     val level = 1 + math.max(left.level, right.level)
     val size = left.size + right.size
-    override def normalized = wrap(this, Empty)
+    override def normalized = ConcOps.wrap(this, Conc.Empty)
+  }
+  
+}
+
+
+sealed abstract class Conqueue[+T] extends Conc[T] {
+  def evaluated: Boolean
+  def tail: Conqueue[T]
+  def addIfUnevaluated[U >: T](stack: List[Conqueue.Spine[U]]): List[Conqueue.Spine[U]] = stack
+}
+
+
+object Conqueue {
+
+  case class Lazy[+T](lstack: List[Spine[T]], queue: Conqueue[T], rstack: List[Spine[T]]) extends Conqueue[T] {
+    def left = queue.left
+    def right = queue.right
+    def level = queue.level
+    def size = queue.size
+    def evaluated = unsupported("Undefined for lazy conqueue.")
+    def tail = unsupported("Undefined for lazy conqueue.")
   }
 
-  sealed abstract class Conqueue[+T] extends Conc[T]
-
-  class Lazy[T](var evaluateTail: () => Conqueue[T]) extends Conqueue[T] {
+  class Spine[+T](val lwing: Num[T], val rwing: Num[T], @volatile var evaluateTail: AnyRef) extends Conqueue[T] {
     lazy val tail: Conqueue[T] = {
-      val t = evaluateTail()
+      val t = (evaluateTail: @unchecked) match {
+        case eager: Conqueue[T] => eager
+        case suspension: Function0[_] => suspension().asInstanceOf[Conqueue[T]]
+      }
       evaluateTail = null
       t
     }
-    def left = tail.left
-    def right = tail.right
-    def level = tail.level
-    def size = tail.size
+    def evaluated = evaluateTail == null
+    override def addIfUnevaluated[U >: T](stack: List[Conqueue.Spine[U]]) = if (!evaluated) this :: stack else stack
+    def left = lwing
+    def right = new <>(tail, rwing)
+    val level: Int = 1 + math.max(lwing.level, math.max(tail.level, rwing.level))
+    val size: Int = lwing.size + tail.size + rwing.size
   }
 
-  case class Spine[T](leftLazy: Lazy[T], leftSide: Num[T], tail: Conqueue[T], rightSide: Num[T], rightLazy: Lazy[T]) extends Conqueue[T] {
-    def left = leftSide
-    def right = new <>(tail, rightSide)
-    val level: Int = 1 + math.max(leftSide.level, math.max(tail.level, rightSide.level))
-    val size: Int = leftSide.size + tail.size + rightSide.size
-  }
-
-  case class Tip[T](tip: Num[T]) extends Conqueue[T] {
+  case class Tip[+T](tip: Num[T]) extends Conqueue[T] {
     def left = tip.left
     def right = tip.right
     def level = tip.level
     def size = tip.size
+    def evaluated = true
+    def tail = unsupported("Undefined for the tip.")
   }
 
   sealed abstract class Num[+T] extends Conc[T] {
     def leftmost: Conc[T]
     def rightmost: Conc[T]
+    def index: Int
   }
 
   case object Zero extends Num[Nothing] {
@@ -98,6 +121,7 @@ object Conc {
     def rightmost = unsupported("empty")
     def level: Int = 0
     def size: Int = 0
+    def index = 0
   }
 
   case class One[T](_1: Conc[T]) extends Num[T] {
@@ -107,6 +131,7 @@ object Conc {
     def rightmost = _1
     def level: Int = 1 + _1.level
     def size: Int = _1.size
+    def index = 1
   }
 
   case class Two[T](_1: Conc[T], _2: Conc[T]) extends Num[T] {
@@ -116,6 +141,7 @@ object Conc {
     def rightmost = _2
     def level: Int = 1 + math.max(_1.level, _2.level)
     def size: Int = _1.size + _2.size
+    def index = 2
   }
 
   case class Three[T](_1: Conc[T], _2: Conc[T], _3: Conc[T]) extends Num[T] {
@@ -125,6 +151,7 @@ object Conc {
     def rightmost = _3
     def level: Int = 1 + math.max(math.max(_1.level, _2.level), _3.level)
     def size: Int = _1.size + _2.size + _3.size
+    def index = 3
   }
 
   case class Four[T](_1: Conc[T], _2: Conc[T], _3: Conc[T], _4: Conc[T]) extends Num[T] {
@@ -134,9 +161,16 @@ object Conc {
     def rightmost = _4
     def level: Int = 1 + math.max(math.max(_1.level, _2.level), math.max(_3.level, _4.level))
     def size: Int = _1.size + _2.size + _3.size + _4.size
+    def index = 4
   }
-  
-  /* operations */
+}
+
+
+object ConcOps {
+
+  import Conc._
+  import ConcRope._
+  import Conqueue._
 
   def queueString[T](conq: Conqueue[T]): String = {
     val buffer = new StringBuffer
@@ -150,16 +184,13 @@ object Conc {
     }
 
     def traverse(rank: Int, indent: Int, conq: Conqueue[T]): Unit = (conq: @unchecked) match {
-      case l: Lazy[T] =>
-        val lazys = "  Lazy(+) "
-        buffer.append(" " * (indent) + lazys)
-      case Spine(_, leftSide, tail, rightSide, _) =>
-        val lefts = str(leftSide)
-        val rights = str(rightSide)
+      case s: Spine[T] =>
+        val lefts = str(s.lwing)
+        val rights = str(s.rwing)
         val spines = "Spine(+)"
         buffer.append(" " * (indent - lefts.length) + lefts + " " + spines + " " + rights)
         buffer.append("\n")
-        traverse(rank + 1, indent, tail)
+        traverse(rank + 1, indent, s.tail)
       case Tip(tip) =>
         val tips = s"Tip(${str(tip)})"
         buffer.append(" " * (indent) + tips)
@@ -167,6 +198,11 @@ object Conc {
 
     traverse(0, 40, conq)
     buffer.toString
+  }
+
+  def wrap[T](xs: Conc[T], ys: Conc[T]): Conc[T] = (xs: @unchecked) match {
+    case Append(ws, zs) => wrap(ws, zs <> ys)
+    case xs => xs <> ys
   }
 
   def foreach[@specialized(Byte, Char, Int, Long, Float, Double) T, @specialized(Byte, Char, Int, Long, Float, Double) U](xs: Conc[T], f: T => U): Unit = (xs: @unchecked) match {
@@ -315,11 +351,6 @@ object Conc {
         case ws => new Append(ws, zs)
       }
     }
-  }
-
-  def wrap[T](xs: Conc[T], ys: Conc[T]): Conc[T] = (xs: @unchecked) match {
-    case Append(ws, zs) => wrap(ws, zs <> ys)
-    case xs => xs <> ys
   }
 
   def shakeLeft[T](xs: Conc[T]): Conc[T] = {
@@ -528,15 +559,70 @@ object Conc {
     }
   }
 
-  def pushHead[T](conq: Conqueue[T], elem: Leaf[T]): Conqueue[T] = {
-    (conq: @unchecked) match {
-      case Spine(ll, left, tail, right, rl) =>
-        ???
-      case Tip(tip) =>
-        ???
-      case l: Lazy[T] =>
-        pushHead(l.tail, elem)
+  def pay[T](work: List[Spine[T]]): List[Spine[T]] = work match {
+    case head :: rest =>
+      // do 2 units of work
+      val tail = head.tail
+      if (tail.evaluated) pay(rest)
+      else {
+        val tailtail = tail.tail
+        tailtail.addIfUnevaluated(rest)
+      }
+    case Nil =>
+      // hoorah - nothing to do
+      Nil
+  }
+
+  def pushHead[T](conq: Conqueue[T], c: Conc[T]): Conqueue[T] = {
+    def noCarryPushHead(num: Num[T], c: Conc[T]): Num[T] = (num.index: @switch) match {
+      case 0 =>
+        One(c)
+      case 1 =>
+        val One(_1) = num
+        Two(c, _1)
+      case 2 =>
+        val Two(_1, _2) = num
+        Three(c, _1, _2)
+      case _ =>
+        invalid("Causes a carry.")
     }
+
+    (conq: @unchecked) match {
+      case s: Spine[T] =>
+        if (s.lwing.index < 3) {
+          new Spine(noCarryPushHead(s.lwing, c), s.rwing, s.tail)
+        } else {
+          val Three(_1, _2, _3) = s.lwing
+          val nleft = Two(c, _1)
+          val carry = _2 <> _3
+          val ntail = (s.tail: @unchecked) match {
+            case st: Spine[T] =>
+              if (st.lwing.index < 3) pushHead(s.tail, carry)
+              else if (st.lwing.index == 3) () => pushHead(s.tail, carry)
+              else pushHead(s.tail, carry)
+            case Tip(_) =>
+              pushHead(s.tail, carry)
+          }
+          new Spine(nleft, s.rwing, ntail)
+        }
+      case Tip(tip) =>
+        if (tip.index < 3) {
+          Tip(noCarryPushHead(tip, c))
+        } else {
+          val Three(_1, _2, _3) = tip
+          new Spine(Two(c, _1), Two(_2, _3), Tip(Zero))
+        }
+    }
+  }
+
+  def pushHeadTop[T](conq: Conqueue[T], leaf: Leaf[T]): Conqueue[T] = conq match {
+    case Conqueue.Lazy(lstack, queue, rstack) =>
+      val nqueue = pushHead(queue, leaf)
+      val nlstack = pay(nqueue.addIfUnevaluated(lstack))
+      val nrstack = pay(rstack)
+      Conqueue.Lazy(nlstack, nqueue, nrstack)
+    case _ =>
+      pushHead(conq, leaf)
   }
 
   def popHead[T](conq: Conqueue[T]): Conqueue[T] = {
@@ -552,16 +638,14 @@ object Conc {
     }
 
     (conq: @unchecked) match {
-      case Spine(ll, left, tail, right, rl) =>
-        leftmost(left.leftmost)
+      case s: Spine[T] =>
+        leftmost(s.lwing.leftmost)
       case Tip(tip) =>
         leftmost(tip.leftmost)
-      case l: Lazy[T] =>
-        head(l.tail)
     }
   }
 
-  def pushLast[T](conq: Conqueue[T], elem: T): Conqueue[T] = {
+  def pushLast[T](conq: Conqueue[T], leaf: Leaf[T]): Conqueue[T] = {
     ???
   }
 
@@ -578,12 +662,10 @@ object Conc {
     }
 
     (conq: @unchecked) match {
-      case Spine(ll, left, tail, right, rl) =>
-        rightmost(right.rightmost)
+      case s: Spine[T] =>
+        rightmost(s.rwing.rightmost)
       case Tip(tip) =>
         rightmost(tip.rightmost)
-      case l: Lazy[T] =>
-        last(l.tail)
     }
   }
 

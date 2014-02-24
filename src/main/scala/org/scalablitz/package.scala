@@ -8,24 +8,28 @@ import scala.reflect.ClassTag
 
 package object scalablitz {
 
-  implicit class ConcOps[T](val self: Conc[T]) extends AnyVal {
+  def invalid(msg: String) = throw new IllegalStateException(msg)
+
+  def unsupported(msg: String) = throw new UnsupportedOperationException(msg)
+
+  implicit class ConcApi[T](val self: Conc[T]) extends AnyVal {
     def apply(i: Int) = {
       require(i >= 0 && i < self.size)
-      Conc.apply(self, i)
+      ConcOps.apply(self, i)
     }
-    def foreach[U](f: T => U) = Conc.foreach(self, f)
-    def <>(that: Conc[T]) = Conc.concatTop(self, that)
+    def foreach[U](f: T => U) = ConcOps.foreach(self, f)
+    def <>(that: Conc[T]) = ConcOps.concatTop(self, that)
   }
 
-  implicit class ConcModificationOps[T: ClassTag](val self: Conc[T]) {
+  implicit class ConcModificationApi[T: ClassTag](val self: Conc[T]) {
     def update(i: Int, y: T) = {
       require(i >= 0 && i < self.size)
-      Conc.update(self, i, y)
+      ConcOps.update(self, i, y)
     }
     def insert(i: Int, y: T) = {
       require(i >= 0 && i <= self.size)
-      Conc.insert(self, i, y)
+      ConcOps.insert(self, i, y)
     }
-    def :+(y: T) = Conc.appendTop(self, new Conc.Single(y))
+    def :+(y: T) = ConcOps.appendTop(self, new Conc.Single(y))
   }
 }

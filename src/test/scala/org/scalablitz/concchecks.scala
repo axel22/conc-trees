@@ -7,6 +7,8 @@ import org.scalacheck._
 import org.scalacheck.Prop._
 import org.scalacheck.Gen._
 import Conc._
+import ConcRope._
+import Conqueue._
 
 
 
@@ -52,7 +54,7 @@ object ConcChecks extends Properties("Conc") with ConcSnippets {
   }
 
   property("left shake") = forAll(trees(10)) { tree =>
-    val shaken = Conc.shakeLeft(tree)
+    val shaken = ConcOps.shakeLeft(tree)
     all(
       s"invariants: $shaken" |: checkInvs(shaken),
       s"leaning left: $shaken" |: (shaken.level <= 1 || shaken.level < tree.level || shaken.left.level >= shaken.right.level)
@@ -60,7 +62,7 @@ object ConcChecks extends Properties("Conc") with ConcSnippets {
   }
 
   property("right shake") = forAll(trees(10)) { tree =>
-    val shaken = Conc.shakeRight(tree)
+    val shaken = ConcOps.shakeRight(tree)
     all(
       s"invariants: $shaken" |: checkInvs(shaken),
       s"leaning right: $shaken" |: (shaken.level <= 1 || shaken.level < tree.level || shaken.left.level <= shaken.right.level)
@@ -102,10 +104,10 @@ object ConcChecks extends Properties("Conc") with ConcSnippets {
   def genSpine(rank: Int, maxRank: Int): Gen[Spine[Int]] = for {
     leftNum <- oneOf(2, 3)
     rightNum <- oneOf(2, 3)
-    leftSide <- genNum(leftNum, rank)
-    rightSide <- genNum(rightNum, rank)
+    leftWing <- genNum(leftNum, rank)
+    rightWing <- genNum(rightNum, rank)
     tail <- genConqueue(rank + 1, maxRank)
-  } yield Spine(null, leftSide, tail, rightSide, null)
+  } yield new Spine(leftWing, rightWing, () => tail)
 
   def genConqueue(rank: Int, maxRank: Int) = for {
     conqueue <- if (rank == maxRank) genTip(rank) else genSpine(rank, maxRank)
@@ -119,13 +121,13 @@ object ConcChecks extends Properties("Conc") with ConcSnippets {
   property("head correctness") = forAll(queues(2)) { conq =>
     val buffer = mutable.Buffer[Int]()
     for (x <- conq) buffer += x
-    buffer.head == head(conq).asInstanceOf[Single[Int]].x
+    buffer.head == ConcOps.head(conq).asInstanceOf[Single[Int]].x
   }
 
   property("last correctness") = forAll(queues(2)) { conq =>
     val buffer = mutable.Buffer[Int]()
     for (x <- conq) buffer += x
-    s"${queueString(conq)}\n: ${buffer.last} vs ${last(conq)}" |: buffer.last == last(conq).asInstanceOf[Single[Int]].x
+    s"${ConcOps.queueString(conq)}\n: ${buffer.last} vs ${ConcOps.last(conq)}" |: buffer.last == ConcOps.last(conq).asInstanceOf[Single[Int]].x
   }
 
 }
