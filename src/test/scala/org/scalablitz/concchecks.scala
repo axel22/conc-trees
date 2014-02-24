@@ -138,7 +138,7 @@ object ConcChecks extends Properties("Conc") with ConcSnippets {
     s"${ConcOps.queueString(conq)}\n: ${buffer.last} vs ${ConcOps.last(conq)}" |: buffer.last == ConcOps.last(conq).asInstanceOf[Single[Int]].x
   }
 
-  property("conqueue pushHeadTop") = forAll(queues(5)) { conq =>
+  property("conqueue pushHeadTop") = forAll(queues(9)) { conq =>
     val pushed = ConcOps.pushHeadTop(conq, new Single(-1))
     //println(ConcOps.queueString(conq))
     //println("after:")
@@ -149,7 +149,7 @@ object ConcChecks extends Properties("Conc") with ConcSnippets {
     (s"" |: toSeq(pushed) == (-1 +: toSeq(conq)))
   }
 
-  property("conqueue pushHeadTop many times") = forAll(queues(5), choose(1, 1000)) { (conq, n) =>
+  property("conqueue pushHeadTop many times") = forAll(queues(9), choose(1, 10000)) { (conq, n) =>
     var pushed = conq
     for (i <- 0 until n) {
       var units = 0
@@ -165,7 +165,7 @@ object ConcChecks extends Properties("Conc") with ConcSnippets {
     (s"Correctly prepended." |: toSeq(pushed) == ((0 until n).map(-_).reverse ++ toSeq(conq)))
   }
 
-  property("lazy conqueue pushHeadTop constant work") = forAll(lazyQueues(9), choose(1, 1000)) { (lazyq, n) =>
+  property("lazy conqueue pushHeadTop constant work") = forAll(lazyQueues(9), choose(1, 10000)) { (lazyq, n) =>
     var pushed: Conqueue[Int] = lazyq
     val workHistory = for (i <- 0 until n) yield {
       var units = 0
