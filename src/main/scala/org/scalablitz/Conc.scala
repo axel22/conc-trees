@@ -128,7 +128,7 @@ object Conqueue {
 
   case class One[T](_1: Conc[T]) extends Num[T] {
     def left = _1
-    def right = Zero
+    def right = Conc.Empty
     def leftmost = _1
     def rightmost = _1
     def level: Int = 1 + _1.level
@@ -225,7 +225,10 @@ object ConcOps {
     case Append(left, right) =>
       foreach(left, f)
       foreach(right, f)
+    case Zero =>
+    case Tip(Zero) =>
     case conc: Conc[T] =>
+      // TODO make more efficient
       foreach(conc.left, f)
       foreach(conc.right, f)
   }

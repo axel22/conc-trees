@@ -29,13 +29,45 @@ trait ConcSnippets {
 
   def checkInvs(xs: Conc[Int]): Boolean = xs match {
     case left <> right =>
-      math.abs(left.level - right.level) <= 1 && checkInvs(left) && checkInvs(right)
+      assert(math.abs(left.level - right.level) <= 1)
+      checkInvs(left) && checkInvs(right)
     case Append(l @ Append(_, lr), r) =>
-      lr.level > r.level && checkInvs(l) && checkInvs(r)
+      assert(lr.level > r.level)
+      checkInvs(l) && checkInvs(r)
     case Append(l, r) =>
-      l.level > r.level && checkInvs(l) && checkInvs(r)
+      assert(l.level > r.level)
+      checkInvs(l) && checkInvs(r)
     case _ =>
       true
+  }
+
+  def checkConqueueInvs(conq: Conc[Int], level: Int): Boolean = (conq: Conc[Int] @unchecked) match {
+    case Lazy(_, q, _) =>
+      level == 0 && checkConqueueInvs(q, 0)
+    case s: Spine[Int] =>
+      checkConqueueInvs(s.lwing, level) && checkConqueueInvs(s.rwing, level) && checkConqueueInvs(s.tail, level + 1)
+    case Tip(tip) =>
+      checkConqueueInvs(tip, level)
+    case Zero =>
+      true
+    case One(_1) =>
+      assert(_1.level == level)
+      checkInvs(_1)
+    case Two(_1, _2) =>
+      assert(_1.level == level)
+      assert(_2.level == level)
+      checkInvs(_1) && checkInvs(_2)
+    case Three(_1, _2, _3) =>
+      assert(_1.level == level)
+      assert(_2.level == level)
+      assert(_3.level == level)
+      checkInvs(_1) && checkInvs(_2) && checkInvs(_3)
+    case Four(_1, _2, _3, _4) =>
+      assert(_1.level == level)
+      assert(_2.level == level)
+      assert(_3.level == level)
+      assert(_4.level == level)
+      checkInvs(_1) && checkInvs(_2) && checkInvs(_3) && checkInvs(_4)
   }
 
   def testConcatCorrectness(n: Int, m: Int) = {

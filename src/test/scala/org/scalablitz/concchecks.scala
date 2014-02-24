@@ -118,23 +118,44 @@ object ConcChecks extends Properties("Conc") with ConcSnippets {
     conqueue <- genConqueue(0, maxRank)
   } yield conqueue
 
-  property("head correctness") = forAll(queues(2)) { conq =>
+  property("conqueue invariants") = forAll(queues(5)) { conq =>
+    checkConqueueInvs(conq, 0)
+  }
+
+  property("head correctness") = forAll(queues(5)) { conq =>
     val buffer = mutable.Buffer[Int]()
     for (x <- conq) buffer += x
     buffer.head == ConcOps.head(conq).asInstanceOf[Single[Int]].x
   }
 
-  property("last correctness") = forAll(queues(2)) { conq =>
+  property("last correctness") = forAll(queues(5)) { conq =>
     val buffer = mutable.Buffer[Int]()
     for (x <- conq) buffer += x
     s"${ConcOps.queueString(conq)}\n: ${buffer.last} vs ${ConcOps.last(conq)}" |: buffer.last == ConcOps.last(conq).asInstanceOf[Single[Int]].x
   }
 
-  property("conqueue append from empty") = forAll(choose(0, 1000)) { n =>
-    val conq = Conqueue.empty
-    true
+  property("conqueue append") = forAll(queues(5)) { conq =>
+    val pushed = ConcOps.pushHead(conq, new Single(-1))
+    //println(ConcOps.queueString(conq))
+    //println("after:")
+    //println(ConcOps.queueString(pushed))
+    //println("--------------")
+    (s"Head is the value just pushed." |: ConcOps.head(pushed).asInstanceOf[Single[Int]].x == -1) &&
+    (s"Invariants are met." |: checkConqueueInvs(pushed, 0)) &&
+    (s"" |: toSeq(pushed) == (-1 +: toSeq(conq)))
   }
 
+  property("conqueue append many times") = forAll(queues(5), choose(1, 1000)) { (conq, n) =>
+    var pushed = conq
+    for (i <- 0 until n) pushed = ConcOps.pushHead(pushed, new Single(-i))
+    //println("n = " + n)
+    //println(ConcOps.queueString(conq))
+    //println("after:")
+    //println(ConcOps.queueString(pushed))
+    //println("--------------")
+    (s"Invariants are met." |: checkConqueueInvs(pushed, 0)) &&
+    (s"Correctly prepended." |: toSeq(pushed) == ((0 until n).map(-_).reverse ++ toSeq(conq)))
+  }
 }
 
 
