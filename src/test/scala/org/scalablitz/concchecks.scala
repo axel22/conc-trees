@@ -335,6 +335,34 @@ object ConcChecks extends Properties("Conc") with ConcSnippets {
     )
   }
 
+  property("lazy conqueue constant amount of work for any operation") = forAll(lazyQueues(15), choose(1, 1000000)) { (conq, seed) =>
+    var modified: Conqueue[Int] = conq
+    val random = new scala.util.Random(seed)
+    val workHistory = mutable.Buffer[Int]()
+    for (i <- 0 until 10000) {
+      var units = 0
+      val ops = modified match {
+        case Lazy(Nil, Tip(Zero), Nil) => 2
+        case _ => 4
+      }
+      random.nextInt(ops) match {
+        case 0 =>
+          modified = ConcOps.pushHeadTop(modified, new Single(i), () => units += 1)
+        case 1 =>
+          modified = ConcOps.pushLastTop(modified, new Single(i), () => units += 1)
+        case 2 =>
+          modified = ConcOps.popHeadTop(modified, () => units += 1)
+        case 3 =>
+          modified = ConcOps.popLastTop(modified, () => units += 1)
+      }
+      workHistory += units
+    }
+    val mostWork = workHistory.max
+    all(
+      s"Most work ever done <= 4: $mostWork in $workHistory" |: mostWork <= 4
+    )
+  }
+
 }
 
 
