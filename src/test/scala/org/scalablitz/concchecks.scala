@@ -294,6 +294,47 @@ object ConcChecks extends Properties("Conc") with ConcSnippets {
     )
   }
 
+  property("conqueue popLastTop") = forAll(queues(9)) { conq =>
+    var popped = conq
+    var list: List[Int] = toSeq(conq).toList
+    val buffer = mutable.Buffer[Int]()
+    while (list.nonEmpty) {
+      list = list.tail
+      //println(ConcOps.queueString(popped))
+      //println("-------------------------")
+      buffer += ConcOps.last(popped).asInstanceOf[Single[Int]].x
+      popped = ConcOps.popLastTop(popped)
+      checkConqueueInvs(popped, 0)
+    }
+    //println(ConcOps.queueString(popped))
+    all(
+      s"Invariants are met." |: checkConqueueInvs(popped, 0),
+      s"Correctly popped." |: toSeq(conq).reverse == buffer,
+      s"Conqueue is empty." |: popped == Tip(Zero)
+    )
+  }
+
+  property("lazy conqueue popHeadTop constant work") = forAll(lazyQueues(12)) { conq =>
+    var popped: Conqueue[Int] = conq
+    var list: List[Int] = toSeq(conq).toList
+    val buffer = mutable.Buffer[Int]()
+    val workHistory = mutable.Buffer[Int]()
+    while (list.nonEmpty) {
+      var units = 0
+      list = list.tail
+      buffer += ConcOps.last(popped).asInstanceOf[Single[Int]].x
+      popped = ConcOps.popLastTop(popped, () => units += 1)
+      workHistory += units
+    }
+    val mostWork = workHistory.max
+    all(
+      s"Invariants are met." |: checkConqueueInvs(popped, 0),
+      s"Correctly popped." |: toSeq(conq) == buffer.reverse,
+      s"Conqueue is empty." |: popped == Lazy(Nil, Tip(Zero), Nil),
+      s"Most work ever done <= 4: $mostWork in $workHistory" |: mostWork <= 4
+    )
+  }
+
 }
 
 
