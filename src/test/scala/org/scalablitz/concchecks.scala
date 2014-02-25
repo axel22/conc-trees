@@ -218,6 +218,27 @@ object ConcChecks extends Properties("Conc") with ConcSnippets {
     (s"Correctly appended." |: toSeq(pushed) == (toSeq(lazyq) ++ (0 until n).map(-_)))
   }
 
+  property("lazy conqueue alternating pushHeadTop/pushLastTop constant work") = forAll(lazyQueues(9), choose(1, 10000), choose(1, 1000)) { (lazyq, n, seed) =>
+    val random = new scala.util.Random(seed)
+    var buffer = toSeq(lazyq)
+    var pushed: Conqueue[Int] = lazyq
+    val workHistory = for (i <- 0 until n) yield {
+      var units = 0
+      if (random.nextBoolean()) {
+        pushed = ConcOps.pushHeadTop(pushed, new Single(-i), () => units += 1)
+        buffer = -i +: buffer
+      } else {
+        pushed = ConcOps.pushLastTop(pushed, new Single(-i), () => units += 1)
+        buffer = buffer :+ -i
+      }
+      units
+    }
+    val mostWork = workHistory.max
+    (s"Most work ever done less than 4: $mostWork" |: mostWork <= 4) &&
+    (s"Invariants are met." |: checkConqueueInvs(pushed, 0)) &&
+    (s"Correctly appended." |: toSeq(pushed) == buffer)
+  }
+
 }
 
 

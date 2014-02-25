@@ -101,6 +101,14 @@ object Conqueue {
     lazy val size: Int = lwing.size + tail.size + rwing.size
   }
 
+  object Spine {
+    def withSameTail[T](s: Spine[T], lwing: Num[T], rwing: Num[T]): Spine[T] = {
+      var tail = s.evaluateTail
+      if (tail eq null) tail = s.tail
+      new Spine(lwing, rwing, tail)
+    }
+  }
+
   case class Tip[+T](tip: Num[T]) extends Conqueue[T] {
     def left = tip.left
     def right = tip.right
@@ -580,26 +588,54 @@ object ConcOps {
 
   val doNothing = () => {}
 
-  def pushHead[T](conq: Conqueue[T], c: Conc[T], onPush: () => Unit): Conqueue[T] = {
-    def noCarryPushHead(num: Num[T], c: Conc[T]): Num[T] = (num.index: @switch) match {
-      case 0 =>
-        One(c)
-      case 1 =>
-        val One(_1) = num
-        Two(c, _1)
-      case 2 =>
-        val Two(_1, _2) = num
-        Three(c, _1, _2)
-      case _ =>
-        invalid("Causes a carry.")
-    }
+  def noCarryPushHead[T](num: Num[T], c: Conc[T]): Num[T] = (num.index: @switch) match {
+    case 0 =>
+      One(c)
+    case 1 =>
+      val One(_1) = num
+      Two(c, _1)
+    case 2 =>
+      val Two(_1, _2) = num
+      Three(c, _1, _2)
+    case _ =>
+      invalid("Causes a carry.")
+  }
 
-    onPush()
+  def noCarryPushLast[T](num: Num[T], c: Conc[T]): Num[T] = (num.index: @switch) match {
+    case 0 =>
+      One(c)
+    case 1 =>
+      val One(_1) = num
+      Two(_1, c)
+    case 2 =>
+      val Two(_1, _2) = num
+      Three(_1, _2, c)
+    case _ =>
+      invalid("Causes a carry.")
+  }
+
+  def noBorrowPopHead[T](num: Num[T]): Num[T] = (num.index: @switch) match {
+    case 0 =>
+      unsupported("empty")
+    case 1 =>
+      Zero
+    case 2 =>
+      val Two(_1, _2) = num
+      One(_2)
+    case 3 =>
+      val Three(_1, _2, _3) = num
+      Two(_2, _3)
+    case 4 =>
+      invalid("Four should never happen.")
+  }
+
+  def pushHead[T](conq: Conqueue[T], c: Conc[T], onPush: () => Unit): Conqueue[T] = {
+    //onPush()
 
     (conq: @unchecked) match {
       case s: Spine[T] =>
         if (s.lwing.index < 3) {
-          new Spine(noCarryPushHead(s.lwing, c), s.rwing, s.tail)
+          Spine.withSameTail(s, noCarryPushHead(s.lwing, c), s.rwing)
         } else {
           val Three(_1, _2, _3) = s.lwing
           val nlwing = Two(c, _1)
@@ -633,7 +669,94 @@ object ConcOps {
   }
 
   def popHead[T](conq: Conqueue[T]): Conqueue[T] = {
-    ???
+    def fix(s: Spine[T]): Spine[T] = {
+      def fixWithBorrow(b: Conc[T], otail: Spine[T], nttail: Conqueue[T], continue: Boolean): Spine[T] = {
+        val bshaken = shakeRight(b)
+        if (bshaken.level == b.level) {
+          if (bshaken.left.level == b.level - 1) {
+            // regular Two in position n - 1
+            val ntlwing = Two(bshaken.left, bshaken.right)
+            val ntspine = new Spine(ntlwing, otail.rwing, nttail)
+            val ntail = {
+              if (continue) ntspine
+              else () => fix(ntspine)
+            }
+            new Spine(s.lwing, s.rwing, ntail)
+          } else {
+            // regular One in position n - 1, regular One in position n - 2
+            val ntlwing = One(bshaken.right)
+            val ntspine = new Spine(ntlwing, otail.rwing, nttail)
+            val ntail = {
+              if (continue) ntspine
+              else () => fix(ntspine)
+            }
+            val nlwing = noCarryPushLast(s.left, bshaken.left)
+            new Spine(nlwing, s.rwing, ntail)
+          }
+        } else {
+          // excited One in position n - 1
+          val ntlwing = One(bshaken)
+          val ntspine = new Spine(ntlwing, otail.rwing, nttail)
+          val ntail = {
+            if (continue) ntspine
+            else () => fix(ntspine)
+          }
+          new Spine(s.lwing, s.rwing, ntail)
+        }
+      }
+
+      (s.tail: @unchecked) match {
+        case st: Spine[T] if st.lwing.index == 0 =>
+          (st.tail: @unchecked) match {
+            case stt: Spine[T] =>
+              val nttlwing = noBorrowPopHead(stt.lwing)
+              val nttail = Spine.withSameTail(stt, nttlwing, stt.rwing)
+              fixWithBorrow(stt.lwing.leftmost, st, nttail, nttlwing.index > 0)
+            case Tip(Zero) =>
+              new Spine(s.lwing, s.rwing, Tip(st.rwing))
+            case Tip(tip) =>
+              fixWithBorrow(tip.leftmost, st, Tip(noBorrowPopHead(tip)), false)
+          }
+        case _ =>
+          s
+      }
+    }
+
+    (conq: @unchecked) match {
+      case s: Spine[T] =>
+        if (s.lwing.index > 1) {
+          Spine.withSameTail(s, noBorrowPopHead(s.lwing), s.rwing)
+        } else {
+          (s.tail: @unchecked) match {
+            case st: Spine[T] => // note: s is at rank 0
+              val tleftmost = st.lwing.leftmost
+              val nlwing = Two(tleftmost.left, tleftmost.right)
+              val ntlwing = noBorrowPopHead(st.lwing)
+              val ntail = Spine.withSameTail(st, ntlwing, st.rwing)
+              val nspine = new Spine(nlwing, s.rwing, ntail)
+              if (ntlwing.index > 0) nspine else fix(nspine)
+            case Tip(Zero) =>
+              Tip(s.rwing)
+            case Tip(tip) =>
+              val leftmost = tip.leftmost
+              val nlwing = Two(leftmost.left, leftmost.right)
+              val ntip = Tip(noBorrowPopHead(tip))
+              new Spine(nlwing, s.rwing, ntip)
+          }
+        }
+      case Tip(tip) =>
+        Tip(noBorrowPopHead(tip))
+    }
+  }
+
+  def popHeadTop[T](conq: Conqueue[T]): Conqueue[T] = conq match {
+    case Conqueue.Lazy(lstack, queue, rstack) =>
+      val nqueue = popHead(queue)
+      val nlstack = pay(nqueue.addIfUnevaluated(lstack))
+      val nrstack = pay(rstack)
+      Conqueue.Lazy(nlstack, nqueue, nrstack)
+    case _ =>
+      popHead(conq)
   }
 
   def head[T](conq: Conqueue[T]): Leaf[T] = {
@@ -653,25 +776,12 @@ object ConcOps {
   }
 
   def pushLast[T](conq: Conqueue[T], c: Conc[T], onPush: () => Unit = doNothing): Conqueue[T] = {
-    def noCarryPushLast(num: Num[T], c: Conc[T]): Num[T] = (num.index: @switch) match {
-      case 0 =>
-        One(c)
-      case 1 =>
-        val One(_1) = num
-        Two(_1, c)
-      case 2 =>
-        val Two(_1, _2) = num
-        Three(_1, _2, c)
-      case _ =>
-        invalid("Causes a carry.")
-    }
-
-    onPush()
+    //onPush()
 
     (conq: @unchecked) match {
       case s: Spine[T] =>
         if (s.rwing.index < 3) {
-          new Spine(s.lwing, noCarryPushLast(s.rwing, c), s.tail)
+          Spine.withSameTail(s, s.lwing, noCarryPushLast(s.rwing, c))
         } else {
           val Three(_1, _2, _3) = s.rwing
           val nrwing = Two(_3, c)
