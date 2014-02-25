@@ -144,9 +144,11 @@ object ConcChecks extends Properties("Conc") with ConcSnippets {
     //println("after:")
     //println(ConcOps.queueString(pushed))
     //println("--------------")
-    (s"Head is the value just pushed." |: ConcOps.head(pushed).asInstanceOf[Single[Int]].x == -1) &&
-    (s"Invariants are met." |: checkConqueueInvs(pushed, 0)) &&
-    (s"" |: toSeq(pushed) == (-1 +: toSeq(conq)))
+    all(
+      s"Head is the value just pushed." |: ConcOps.head(pushed).asInstanceOf[Single[Int]].x == -1,
+      s"Invariants are met." |: checkConqueueInvs(pushed, 0),
+      s"Correctly prepended." |: toSeq(pushed) == (-1 +: toSeq(conq))
+    )
   }
 
   property("conqueue pushHeadTop many times") = forAll(queues(9), choose(1, 10000)) { (conq, n) =>
@@ -161,8 +163,10 @@ object ConcChecks extends Properties("Conc") with ConcSnippets {
     //println("after:")
     //println(ConcOps.queueString(pushed))
     //println("--------------")
-    (s"Invariants are met." |: checkConqueueInvs(pushed, 0)) &&
-    (s"Correctly prepended." |: toSeq(pushed) == ((0 until n).map(-_).reverse ++ toSeq(conq)))
+    all(
+      s"Invariants are met." |: checkConqueueInvs(pushed, 0),
+      s"Correctly prepended." |: toSeq(pushed) == ((0 until n).map(-_).reverse ++ toSeq(conq))
+    )
   }
 
   property("conqueue pushLastTop") = forAll(queues(9)) { conq =>
@@ -171,9 +175,11 @@ object ConcChecks extends Properties("Conc") with ConcSnippets {
     //println("after:")
     //println(ConcOps.queueString(pushed))
     //println("--------------")
-    (s"Last is the value just pushed." |: ConcOps.last(pushed).asInstanceOf[Single[Int]].x == -1) &&
-    (s"Invariants are met." |: checkConqueueInvs(pushed, 0)) &&
-    (s"" |: toSeq(pushed) == (toSeq(conq) :+ -1))
+    all(
+      s"Last is the value just pushed." |: ConcOps.last(pushed).asInstanceOf[Single[Int]].x == -1,
+      s"Invariants are met." |: checkConqueueInvs(pushed, 0),
+      s"Correctly appended." |: toSeq(pushed) == (toSeq(conq) :+ -1)
+    )
   }
 
   property("conqueue pushLastTop many times") = forAll(queues(9), choose(1, 10000)) { (conq, n) =>
@@ -188,8 +194,10 @@ object ConcChecks extends Properties("Conc") with ConcSnippets {
     //println("after:")
     //println(ConcOps.queueString(pushed))
     //println("--------------")
-    (s"Invariants are met." |: checkConqueueInvs(pushed, 0)) &&
-    (s"Correctly appended." |: toSeq(pushed) == (toSeq(conq) ++ (0 until n).map(-_)))
+    all(
+      s"Invariants are met." |: checkConqueueInvs(pushed, 0),
+      s"Correctly appended." |: toSeq(pushed) == (toSeq(conq) ++ (0 until n).map(-_))
+    )
   }
 
   property("lazy conqueue pushHeadTop constant work") = forAll(lazyQueues(9), choose(1, 10000)) { (lazyq, n) =>
@@ -200,9 +208,11 @@ object ConcChecks extends Properties("Conc") with ConcSnippets {
       units
     }
     val mostWork = workHistory.max
-    (s"Most work ever done less than 4: $mostWork" |: mostWork <= 4) &&
-    (s"Invariants are met." |: checkConqueueInvs(pushed, 0)) &&
-    (s"Correctly prepended." |: toSeq(pushed) == ((0 until n).map(-_).reverse ++ toSeq(lazyq)))
+    all(
+      s"Most work ever done less than 4: $mostWork" |: mostWork <= 4,
+      s"Invariants are met." |: checkConqueueInvs(pushed, 0),
+      s"Correctly prepended." |: toSeq(pushed) == ((0 until n).map(-_).reverse ++ toSeq(lazyq))
+    )
   }
 
   property("lazy conqueue pushLastTop constant work") = forAll(lazyQueues(9), choose(1, 10000)) { (lazyq, n) =>
@@ -213,9 +223,11 @@ object ConcChecks extends Properties("Conc") with ConcSnippets {
       units
     }
     val mostWork = workHistory.max
-    (s"Most work ever done less than 4: $mostWork" |: mostWork <= 4) &&
-    (s"Invariants are met." |: checkConqueueInvs(pushed, 0)) &&
-    (s"Correctly appended." |: toSeq(pushed) == (toSeq(lazyq) ++ (0 until n).map(-_)))
+    all(
+      s"Most work ever done less than 4: $mostWork" |: mostWork <= 4,
+      s"Invariants are met." |: checkConqueueInvs(pushed, 0),
+      s"Correctly appended." |: toSeq(pushed) == (toSeq(lazyq) ++ (0 until n).map(-_))
+    )
   }
 
   property("lazy conqueue alternating pushHeadTop/pushLastTop constant work") = forAll(lazyQueues(9), choose(1, 10000), choose(1, 1000)) { (lazyq, n, seed) =>
@@ -234,9 +246,26 @@ object ConcChecks extends Properties("Conc") with ConcSnippets {
       units
     }
     val mostWork = workHistory.max
-    (s"Most work ever done less than 4: $mostWork" |: mostWork <= 4) &&
-    (s"Invariants are met." |: checkConqueueInvs(pushed, 0)) &&
-    (s"Correctly appended." |: toSeq(pushed) == buffer)
+    all(
+      s"Most work ever done less than 4: $mostWork" |: mostWork <= 4,
+      s"Invariants are met." |: checkConqueueInvs(pushed, 0),
+      s"Correctly appended." |: toSeq(pushed) == buffer
+    )
+  }
+
+  property("conqueue popHeadTop 10 times") = forAll(queues(9)) { conq =>
+    var popped = conq
+    var list: List[Int] = toSeq(conq).toList
+    val buffer = mutable.Buffer[Int]()
+    while (list.nonEmpty) {
+      list = list.tail
+      buffer += ConcOps.head(popped).asInstanceOf[Single[Int]].x
+      popped = ConcOps.popHeadTop(popped)
+    }
+    all(
+      s"Invariants are met." |: checkConqueueInvs(popped, 0),
+      s"Correctly popped." |: toSeq(conq).reverse == buffer
+    )
   }
 
 }

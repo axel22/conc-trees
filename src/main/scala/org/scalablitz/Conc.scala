@@ -677,19 +677,13 @@ object ConcOps {
             // regular Two in position n - 1
             val ntlwing = Two(bshaken.left, bshaken.right)
             val ntspine = new Spine(ntlwing, otail.rwing, nttail)
-            val ntail = {
-              if (continue) ntspine
-              else () => fix(ntspine)
-            }
+            val ntail = if (continue) ntspine else () => fix(ntspine)
             new Spine(s.lwing, s.rwing, ntail)
           } else {
             // regular One in position n - 1, regular One in position n - 2
             val ntlwing = One(bshaken.right)
             val ntspine = new Spine(ntlwing, otail.rwing, nttail)
-            val ntail = {
-              if (continue) ntspine
-              else () => fix(ntspine)
-            }
+            val ntail = if (continue) ntspine else () => fix(ntspine)
             val nlwing = noCarryPushLast(s.left, bshaken.left)
             new Spine(nlwing, s.rwing, ntail)
           }
@@ -697,10 +691,7 @@ object ConcOps {
           // excited One in position n - 1
           val ntlwing = One(bshaken)
           val ntspine = new Spine(ntlwing, otail.rwing, nttail)
-          val ntail = {
-            if (continue) ntspine
-            else () => fix(ntspine)
-          }
+          val ntail = if (continue) ntspine else () => fix(ntspine)
           new Spine(s.lwing, s.rwing, ntail)
         }
       }
