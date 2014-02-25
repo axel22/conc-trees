@@ -630,7 +630,7 @@ object ConcOps {
   }
 
   def pushHead[T](conq: Conqueue[T], c: Conc[T], onPush: () => Unit): Conqueue[T] = {
-    //onPush()
+    onPush()
 
     (conq: @unchecked) match {
       case s: Spine[T] =>
@@ -668,8 +668,10 @@ object ConcOps {
       pushHead(conq, leaf, onPush)
   }
 
-  def popHead[T](conq: Conqueue[T]): Conqueue[T] = {
+  def popHead[T](conq: Conqueue[T], onFix: () => Unit = doNothing): Conqueue[T] = {
     def fix(s: Spine[T]): Spine[T] = {
+      onFix()
+
       def fixWithBorrow(b: Conc[T], otail: Spine[T], nttail: Conqueue[T], continue: Boolean): Spine[T] = {
         val bshaken = shakeRight(b)
         if (bshaken.level == b.level) {
@@ -740,14 +742,14 @@ object ConcOps {
     }
   }
 
-  def popHeadTop[T](conq: Conqueue[T]): Conqueue[T] = conq match {
+  def popHeadTop[T](conq: Conqueue[T], onFix: () => Unit = doNothing): Conqueue[T] = conq match {
     case Conqueue.Lazy(lstack, queue, rstack) =>
-      val nqueue = popHead(queue)
+      val nqueue = popHead(queue, onFix)
       val nlstack = pay(nqueue.addIfUnevaluated(lstack))
       val nrstack = pay(rstack)
       Conqueue.Lazy(nlstack, nqueue, nrstack)
     case _ =>
-      popHead(conq)
+      popHead(conq, onFix)
   }
 
   def head[T](conq: Conqueue[T]): Leaf[T] = {
@@ -763,11 +765,13 @@ object ConcOps {
         leftmost(s.lwing.leftmost)
       case Tip(tip) =>
         leftmost(tip.leftmost)
+      case Lazy(_, queue, _) =>
+        head(queue)
     }
   }
 
   def pushLast[T](conq: Conqueue[T], c: Conc[T], onPush: () => Unit = doNothing): Conqueue[T] = {
-    //onPush()
+    onPush()
 
     (conq: @unchecked) match {
       case s: Spine[T] =>
@@ -822,6 +826,8 @@ object ConcOps {
         rightmost(s.rwing.rightmost)
       case Tip(tip) =>
         rightmost(tip.rightmost)
+      case Lazy(_, queue, _) =>
+        last(queue)
     }
   }
 

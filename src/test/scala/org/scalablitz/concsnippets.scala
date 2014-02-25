@@ -43,7 +43,8 @@ trait ConcSnippets {
 
   def checkConqueueInvs(conq: Conc[Int], level: Int): Boolean = (conq: Conc[Int] @unchecked) match {
     case Lazy(_, q, _) =>
-      level == 0 && checkConqueueInvs(q, 0)
+      assert(level == 0)
+      checkConqueueInvs(q, 0)
     case s: Spine[Int] =>
       checkConqueueInvs(s.lwing, level) && checkConqueueInvs(s.rwing, level) && checkConqueueInvs(s.tail, level + 1)
     case Tip(tip) =>
