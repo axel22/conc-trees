@@ -1041,7 +1041,7 @@ object ConcOps {
     case xs @ _ <> _ => unwrap(xs)
   }
 
-  private def unwrap[T](xs: <>[T]): (Array[Num[T]], Array[Num[T]], Num[T]) = {
+  private def unwrap[T](xs: <>[T]): Conqueue[T] = {
     ???
   }
 
