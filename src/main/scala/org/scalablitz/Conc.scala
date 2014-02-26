@@ -82,6 +82,7 @@ object Conqueue {
     def size = queue.size
     def evaluated = unsupported("Undefined for lazy conqueue.")
     def tail = unsupported("Undefined for lazy conqueue.")
+    override def normalized = queue.normalized
   }
 
   class Spine[+T](val lwing: Num[T], val rwing: Num[T], @volatile var evaluateTail: AnyRef) extends Conqueue[T] {
@@ -99,6 +100,7 @@ object Conqueue {
     def right = new <>(tail, rwing)
     lazy val level: Int = 1 + math.max(lwing.level, math.max(tail.level, rwing.level))
     lazy val size: Int = lwing.size + tail.size + rwing.size
+    override def normalized = ConcOps.normalizeLeftWingsAndTip(this, Conc.Empty) <> ConcOps.normalizeRightWings(this, Conc.Empty)
   }
 
   object Spine {
@@ -116,6 +118,7 @@ object Conqueue {
     def size = tip.size
     def evaluated = true
     def tail = unsupported("Undefined for the tip.")
+    override def normalized = tip.normalized
   }
 
   sealed abstract class Num[+T] extends Conc[T] {
@@ -132,6 +135,7 @@ object Conqueue {
     def level: Int = 0
     def size: Int = 0
     def index = 0
+    override def normalized = Conc.Empty
   }
 
   case class One[T](_1: Conc[T]) extends Num[T] {
@@ -142,6 +146,7 @@ object Conqueue {
     def level: Int = 1 + _1.level
     def size: Int = _1.size
     def index = 1
+    override def normalized = _1
   }
 
   case class Two[T](_1: Conc[T], _2: Conc[T]) extends Num[T] {
@@ -152,6 +157,7 @@ object Conqueue {
     def level: Int = 1 + math.max(_1.level, _2.level)
     def size: Int = _1.size + _2.size
     def index = 2
+    override def normalized = _1 <> _2
   }
 
   case class Three[T](_1: Conc[T], _2: Conc[T], _3: Conc[T]) extends Num[T] {
@@ -162,6 +168,7 @@ object Conqueue {
     def level: Int = 1 + math.max(math.max(_1.level, _2.level), _3.level)
     def size: Int = _1.size + _2.size + _3.size
     def index = 3
+    override def normalized = _1 <> _2 <> _3
   }
 
   case class Four[T](_1: Conc[T], _2: Conc[T], _3: Conc[T], _4: Conc[T]) extends Num[T] {
@@ -172,6 +179,7 @@ object Conqueue {
     def level: Int = 1 + math.max(math.max(_1.level, _2.level), math.max(_3.level, _4.level))
     def size: Int = _1.size + _2.size + _3.size + _4.size
     def index = 4
+    override def normalized = _1 <> _2 <> _3 <> _4
   }
 }
 
@@ -926,7 +934,52 @@ object ConcOps {
     }
   }
 
+  @tailrec def normalizeLeftWingsAndTip[T](conq: Conqueue[T], front: Conc[T]): Conc[T] = {
+    @tailrec def wrapUntil(s: Spine[T], wrapped: Conc[T], level: Int): (Conc[T], Conqueue[T]) = {
+      if (wrapped.level >= level) (wrapped, s)
+      else {
+        val nwrapped = wrapped <> s.lwing.normalized
+        (s.tail: @unchecked) match {
+          case st: Spine[T] => wrapUntil(st, nwrapped, level)
+          case Tip(tip) => (wrapped, s.tail)
+        }
+      }
+    }
+
+    (conq: @unchecked) match {
+      case s: Spine[T] =>
+        val (wrapped, remaining) = wrapUntil(s, Conc.Empty, front.level)
+        normalizeLeftWingsAndTip(remaining, front <> wrapped)
+      case Tip(tip) =>
+        front <> tip.normalized
+    }
+  }
+
+  @tailrec def normalizeRightWings[T](conq: Conqueue[T], back: Conc[T]): Conc[T] = {
+    @tailrec def wrapUntil(s: Spine[T], wrapped: Conc[T], level: Int): (Conc[T], Conqueue[T]) = {
+      if (wrapped.level >= level) (wrapped, s)
+      else {
+        val nwrapped = s.rwing.normalized <> wrapped
+        (s.tail: @unchecked) match {
+          case st: Spine[T] => wrapUntil(st, nwrapped, level)
+          case Tip(tip) => (wrapped, Tip(Zero))
+        }
+      }
+    }
+
+    (conq: @unchecked) match {
+      case s: Spine[T] =>
+        val (wrapped, remaining) = wrapUntil(s, Conc.Empty, back.level)
+        normalizeRightWings(remaining, wrapped <> back)
+      case Tip(tip) =>
+        back
+    }
+  }
+
 }
+
+
+
 
 
 
