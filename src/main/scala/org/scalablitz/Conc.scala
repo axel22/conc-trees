@@ -73,7 +73,7 @@ sealed abstract class Conqueue[+T] extends Conc[T] {
 
 object Conqueue {
 
-  def empty = Tip(Zero)
+  def empty[T]: Conqueue[T] = Tip(Zero)
 
   case class Lazy[+T](lstack: List[Spine[T]], queue: Conqueue[T], rstack: List[Spine[T]]) extends Conqueue[T] {
     def left = queue.left
@@ -622,6 +622,60 @@ object ConcOps {
       invalid("Causes a carry.")
   }
 
+  def noCarryAdd[T](n: Num[T], m: Num[T]): Num[T] = (n.index: @switch) match {
+    case 0 =>
+      m
+    case 1 =>
+      val One(n1) = n
+      (m.index: @switch) match {
+        case 0 =>
+          n
+        case 1 =>
+          val One(m1) = m
+          Two(n1, m1)
+        case 2 =>
+          val Two(m1, m2) = m
+          Three(n1, m1, m2)
+        case 3 =>
+          val Three(m1, m2, m3) = m
+          Four(n1, m1, m2, m3)
+        case _ =>
+          invalid("Causes a carry.")
+      }
+    case 2 =>
+      val Two(n1, n2) = n
+      (m.index: @switch) match {
+        case 0 =>
+          n
+        case 1 =>
+          val One(m1) = m
+          Three(n1, n2, m1)
+        case 2 =>
+          val Two(m1, m2) = m
+          Four(n1, n2, m1, m2)
+        case _ =>
+          invalid("Causes a carry.")
+      }
+    case 3 =>
+      val Three(n1, n2, n3) = n
+      (m.index: @switch) match {
+        case 0 =>
+          n
+        case 1 =>
+          val One(m1) = m
+          Four(n1, n2, n3, m1)
+        case _ =>
+          invalid("Causes a carry.")
+      }
+    case 4 =>
+      (m.index: @switch) match {
+        case 0 =>
+          n
+        case _ =>
+          invalid("Causes a carry.")
+      }
+  }
+
   def noBorrowPopHead[T](num: Num[T]): Num[T] = (num.index: @switch) match {
     case 0 =>
       unsupported("empty")
@@ -652,7 +706,7 @@ object ConcOps {
       invalid("Four should never happen.")
   }
 
-  def pushHead[T](conq: Conqueue[T], c: Conc[T], onPush: () => Unit): Conqueue[T] = {
+  def pushHead[T](conq: Conqueue[T], c: Conc[T], onPush: () => Unit = doNothing): Conqueue[T] = {
     onPush()
 
     (conq: @unchecked) match {
@@ -975,6 +1029,55 @@ object ConcOps {
         back
     }
   }
+
+  def toLazyConqueue[T](xs: Conc[T]): Conqueue.Lazy[T] = Lazy(Nil, toConqueue(xs), Nil)
+
+  def toConqueue[T](xs: Conc[T]): Conqueue[T] = xs match {
+    case conq: Conqueue[T] => conq
+    case Append(_, _) => toConqueue(xs.normalized)
+    case num: Num[T] => toConqueue(num.normalized)
+    case Empty => Tip(Zero)
+    case leaf: Leaf[T] => Tip(One(leaf))
+    case xs @ _ <> _ => unwrap(xs)
+  }
+
+  private def unwrap[T](xs: <>[T]): (Array[Num[T]], Array[Num[T]], Num[T]) = {
+    ???
+  }
+
+}
+
+
+class ConqueueBuffer[@specialized(Byte, Char, Int, Long, Float, Double) T: ClassTag](isLazy: Boolean = true) {
+  import Conc._
+
+  private var conqueue: Conqueue[T] = if (isLazy) Conqueue.Lazy(Nil, Conqueue.empty, Nil) else Conqueue.empty
+
+  def size = conqueue.size
+
+  def pushHead(elem: T): this.type = {
+    conqueue = ConcOps.pushHeadTop(conqueue, new Single(elem))
+    this
+  }
+
+  def popHead(): T = {
+    val head = ConcOps.head(conqueue)
+    conqueue = ConcOps.popHeadTop(conqueue)
+    head.asInstanceOf[Single[T]].x
+  }
+
+  def pushLast(elem: T): this.type = {
+    conqueue = ConcOps.pushLastTop(conqueue, new Single(elem))
+    this
+  }
+
+  def popLast(): T = {
+    val last = ConcOps.last(conqueue)
+    conqueue = ConcOps.popLastTop(conqueue)
+    last.asInstanceOf[Single[T]].x
+  }
+
+  def toConqueue = conqueue
 
 }
 
