@@ -1042,7 +1042,51 @@ object ConcOps {
   }
 
   private def unwrap[T](xs: <>[T]): Conqueue[T] = {
-    ???
+    val lwings = Array.fill[ConqueueBuffer[Conc[T]]](xs.level)(new ConqueueBuffer(false))
+    val rwings = Array.fill[ConqueueBuffer[Conc[T]]](xs.level)(new ConqueueBuffer(false))
+    var lend = xs.left.level
+    var rend = xs.right.level
+    lwings(lend).pushHead(xs.left)
+    rwings(rend).pushHead(xs.right)
+
+    def spreadLeft() {
+      ???
+    }
+
+    def spreadRight() {
+      ???
+    }
+
+    spreadLeft()
+    spreadRight()
+    while (math.abs(lend - rend) > 1) {
+      if (lend > rend) {
+        val borrow = lwings(lend).popLast()
+        rwings(lend).pushHead(borrow)
+        rend = lend
+        spreadRight()
+      } else {
+        val borrow = rwings(rend).popHead()
+        rwings(rend).pushLast(borrow)
+        lend = rend
+        spreadLeft()
+      }
+    }
+
+    def asNum(b: ConqueueBuffer[Conc[T]]): Num[T] = ???
+
+    def zip(lwings: List[Num[T]], rwings: List[Num[T]], tip: Num[T]): Conqueue[T] = {
+      if (lwings.isEmpty) Tip(tip)
+      else new Spine(lwings.head, rwings.head, zip(lwings.tail, rwings.tail, tip))
+    }
+
+    zip(
+      lwings.map(asNum).take(math.min(lend, rend)).toList,
+      rwings.map(asNum).take(math.min(lend, rend)).toList,
+      if (lend > rend) asNum(lwings(lend))
+      else if (lend < rend) asNum(lwings(rend))
+      else Zero
+    )
   }
 
 }
