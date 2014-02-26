@@ -363,6 +363,38 @@ object ConcChecks extends Properties("Conc") with ConcSnippets {
     )
   }
 
+  property("conqueue normalized") = forAll(queues(15), choose(1, 1000000), choose(1, 10000)) { (conq, seed, numops) =>
+    var modified: Conqueue[Int] = conq
+    val random = new scala.util.Random(seed)
+    for (i <- 0 until numops) {
+      val ops = modified match {
+        case Tip(Zero) => 2
+        case _ => 4
+      }
+      random.nextInt(ops) match {
+        case 0 =>
+          modified = ConcOps.pushHeadTop(modified, new Single(i))
+        case 1 =>
+          modified = ConcOps.pushLastTop(modified, new Single(i))
+        case 2 =>
+          modified = ConcOps.popHeadTop(modified)
+        case 3 =>
+          modified = ConcOps.popLastTop(modified)
+      }
+    }
+    val flushed = toSeq(modified)
+    val normalized = modified.normalized
+    val normalizedFlushed = toSeq(normalized)
+    all(
+      s"Invariants are met." |: checkInvs(normalized),
+      s"Same sequence after normalization: $normalizedFlushed vs $flushed\n" +
+      s"; conq:\n${ConcOps.queueString(conq, (num: Num[Int]) => num.toString)}\n" +
+      s"; lwings: ${toSeq(ConcOps.normalizeLeftWingsAndTip(modified, Conc.Empty))}\n" +
+      s"; rwings: ${toSeq(ConcOps.normalizeRightWings(modified, Conc.Empty))}\n" +
+      s"; length: ${normalizedFlushed.length} vs ${flushed.length}" |: normalizedFlushed == flushed
+    )
+  }
+
 }
 
 

@@ -190,27 +190,27 @@ object ConcOps {
   import ConcRope._
   import Conqueue._
 
-  def queueString[T](conq: Conqueue[T]): String = {
-    val buffer = new StringBuffer
+  private def str[T](num: Num[T]): String = num match {
+    case Zero => "Zero"
+    case One(_1) => s"One(${_1.level})"
+    case Two(_1, _2) => s"Two(${_1.level}, ${_2.level})"
+    case Three(_1, _2, _3) => s"Three(${_1.level}, ${_2.level}, ${_3.level})"
+    case Four(_1, _2, _3, _4) => s"Four(${_1.level}, ${_2.level}, ${_3.level}, ${_4.level})"
+  }
 
-    def str(num: Num[T]): String = num match {
-      case Zero => "Zero"
-      case One(_1) => s"One(${_1.level})"
-      case Two(_1, _2) => s"Two(${_1.level}, ${_2.level})"
-      case Three(_1, _2, _3) => s"Three(${_1.level}, ${_2.level}, ${_3.level})"
-      case Four(_1, _2, _3, _4) => s"Four(${_1.level}, ${_2.level}, ${_3.level}, ${_4.level})"
-    }
+  def queueString[T](conq: Conqueue[T], showNum: Num[T] => String = str _): String = {
+    val buffer = new StringBuffer
 
     def traverse(rank: Int, indent: Int, conq: Conqueue[T]): Unit = (conq: @unchecked) match {
       case s: Spine[T] =>
-        val lefts = str(s.lwing)
-        val rights = str(s.rwing)
+        val lefts = showNum(s.lwing)
+        val rights = showNum(s.rwing)
         val spines = "Spine(+)"
         buffer.append(" " * (indent - lefts.length) + lefts + " " + spines + " " + rights)
         buffer.append("\n")
         traverse(rank + 1, indent, s.tail)
       case Tip(tip) =>
-        val tips = s"Tip(${str(tip)})"
+        val tips = s"Tip(${showNum(tip)})"
         buffer.append(" " * (indent) + tips)
     }
 
@@ -941,14 +941,14 @@ object ConcOps {
         val nwrapped = wrapped <> s.lwing.normalized
         (s.tail: @unchecked) match {
           case st: Spine[T] => wrapUntil(st, nwrapped, level)
-          case Tip(tip) => (wrapped, s.tail)
+          case Tip(tip) => (nwrapped, s.tail)
         }
       }
     }
 
     (conq: @unchecked) match {
       case s: Spine[T] =>
-        val (wrapped, remaining) = wrapUntil(s, Conc.Empty, front.level)
+        val (wrapped, remaining) = wrapUntil(s, Conc.Empty, math.max(1, front.level))
         normalizeLeftWingsAndTip(remaining, front <> wrapped)
       case Tip(tip) =>
         front <> tip.normalized
@@ -962,14 +962,14 @@ object ConcOps {
         val nwrapped = s.rwing.normalized <> wrapped
         (s.tail: @unchecked) match {
           case st: Spine[T] => wrapUntil(st, nwrapped, level)
-          case Tip(tip) => (wrapped, Tip(Zero))
+          case Tip(tip) => (nwrapped, Tip(Zero))
         }
       }
     }
 
     (conq: @unchecked) match {
       case s: Spine[T] =>
-        val (wrapped, remaining) = wrapUntil(s, Conc.Empty, back.level)
+        val (wrapped, remaining) = wrapUntil(s, Conc.Empty, math.max(1, back.level))
         normalizeRightWings(remaining, wrapped <> back)
       case Tip(tip) =>
         back
