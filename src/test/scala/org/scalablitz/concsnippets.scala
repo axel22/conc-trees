@@ -46,8 +46,9 @@ trait ConcSnippets {
       assert(level == 0)
       checkConqueueInvs(q, 0)
     case s: Spine[Int] =>
-      assert(s.lwing != Zero)
-      assert(s.rwing != Zero)
+      if (s.lwing == Zero || s.rwing == Zero) {
+        assert(false, "Evaluated Spine cannot contain Zero.")
+      }
       checkConqueueInvs(s.lwing, level) && checkConqueueInvs(s.rwing, level) && checkConqueueInvs(s.tail, level + 1)
     case Tip(tip) =>
       checkConqueueInvs(tip, level)

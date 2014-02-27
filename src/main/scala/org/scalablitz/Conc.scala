@@ -190,7 +190,15 @@ object ConcOps {
   import ConcRope._
   import Conqueue._
 
-  private def str[T](num: Num[T]): String = num match {
+  private def toSeq[T](xs: Conc[T]): Seq[T] = {
+    val buffer = collection.mutable.Buffer[T]()
+    for (x <- xs) {
+      buffer += x
+    }
+    buffer
+  }
+
+  def levelFormatter[T](num: Num[T]): String = num match {
     case Zero => "Zero"
     case One(_1) if _1.level == 0 || (_1.left.level == _1.right.level) => s"One*(${_1.level})"
     case One(_1) => s"One(${_1.level})"
@@ -199,7 +207,17 @@ object ConcOps {
     case Four(_1, _2, _3, _4) => s"Four(${_1.level}, ${_2.level}, ${_3.level}, ${_4.level})"
   }
 
-  def queueString[T](conq: Conqueue[T], showNum: Num[T] => String = str _, spacing: Int = 80): String = {
+  private def mkstr[T](c: Conc[T]) = toSeq(c).mkString("[", ", ", "]")
+
+  def contentsFormatter[T](num: Num[T]): String = num match {
+    case Zero => s"Zero"
+    case One(_1) => s"One(${mkstr(_1)})"
+    case Two(_1, _2) => s"Two(${mkstr(_1)}, ${mkstr(_2)})"
+    case Three(_1, _2, _3) => s"Three(${mkstr(_1)}, ${mkstr(_2)}, ${mkstr(_3)}})"
+    case Four(_, _, _, _) => invalid("never four.")
+  }
+
+  def queueString[T](conq: Conqueue[T], showNum: Num[T] => String = levelFormatter _, spacing: Int = 80): String = {
     val buffer = new StringBuffer
 
     def traverse(rank: Int, indent: Int, conq: Conqueue[T]): Unit = (conq: @unchecked) match {
@@ -1033,16 +1051,16 @@ object ConcOps {
 
   def toLazyConqueue[T](xs: Conc[T]): Conqueue.Lazy[T] = Lazy(Nil, toConqueue(xs), Nil)
 
-  def toConqueue[T](xs: Conc[T]): Conqueue[T] = xs match {
+  def toConqueue[T](xs: Conc[T], log: Log = noLog): Conqueue[T] = xs match {
     case conq: Conqueue[T] => conq
     case Append(_, _) => toConqueue(xs.normalized)
     case num: Num[T] => toConqueue(num.normalized)
     case Empty => Tip(Zero)
     case leaf: Leaf[T] => Tip(One(leaf))
-    case xs @ _ <> _ => unwrap(xs)
+    case xs @ _ <> _ => unwrap(xs, log)
   }
 
-  private def unwrap[T](xs: <>[T]): Conqueue[T] = {
+  private def unwrap[T](xs: <>[T], log: Log = noLog): Conqueue[T] = {
     val lwings = Array.fill[ConqueueBuffer[Conc[T]]](xs.level)(new ConqueueBuffer(false))
     val rwings = Array.fill[ConqueueBuffer[Conc[T]]](xs.level)(new ConqueueBuffer(false))
     var lend = xs.left.level
@@ -1051,22 +1069,50 @@ object ConcOps {
     rwings(rend).pushHead(xs.right)
 
     def printWings(label: String, i: Int) {
-      println("=====> State of wings: " + label + ", " + i)
-      println(lwings.map(_.toConqueue).mkString("\n"))
-      println("--------------")
-      println(rwings.map(_.toConqueue).mkString("\n"))
-      println("--------------")
+      if (log.on) {
+        log("=====> State of wings: " + label + ", " + i)
+        log(lwings.map(_.toConqueue).map(x => queueString(x, contentsFormatter)).mkString("\n"))
+        log("--------------")
+        log(rwings.map(_.toConqueue).map(x => queueString(x, contentsFormatter)).mkString("\n"))
+        log("--------------")
+      }
+    }
+
+    def updateLeftEnd() {
+      lend = math.max(0, lwings.indexWhere(_.isEmpty) - 1)
+      var check = true
+      check = false
+      if (check && !lwings.drop(lend + 1).forall(_.isEmpty)) {
+        assert(false)
+      }
+    }
+
+    def updateRightEnd() {
+      rend = math.max(0, rwings.indexWhere(_.isEmpty) - 1)
+      var check = true
+      check = false
+      if (check && !rwings.drop(rend + 1).forall(_.isEmpty)) {
+        assert(false)
+      }
     }
 
     def fillLeft(i: Int) {
-      if ((i + 1) < lwings.length) {
-        if (lwings(i + 1).isEmpty) fillLeft(i + 1)
-        if (!lwings(i + 1).isEmpty) {
-          val borrow = lwings(i + 1).popHead()
-          val borrowshaken = shakeRight(borrow)
+      def fillHole() {
+        val borrow = lwings(i + 1).popHead()
+        val borrowshaken = shakeRight(borrow)
+        if (borrowshaken.level == borrow.level) {
           lwings(borrowshaken.left.level).pushLast(borrowshaken.left)
           lwings(borrowshaken.right.level).pushLast(borrowshaken.right)
+        } else {
+          lwings(borrowshaken.level).pushLast(borrowshaken)
         }
+      }
+      if ((i + 1) < lwings.length) {
+        if (lwings(i + 1).isEmpty) {
+          fillLeft(i + 1)
+          printWings("recursive fill left", i + 1)
+          if (lwings(i).isEmpty && lwings(i + 1).nonEmpty) fillHole()
+        } else fillHole()
       }
     }
 
@@ -1087,7 +1133,7 @@ object ConcOps {
         i += 1
       }
 
-      lend = math.max(0, lwings.indexWhere(_.isEmpty) - 1)
+      updateLeftEnd()
     }
 
     def dangerous(wings: Array[ConqueueBuffer[Conc[T]]], i: Int) = {
@@ -1130,18 +1176,26 @@ object ConcOps {
         i += 1
       }
 
-      lend = math.max(0, lwings.indexWhere(_.isEmpty) - 1)
+      updateLeftEnd()
     }
 
     def fillRight(i: Int) {
-      if ((i + 1) < rwings.length) {
-        if (rwings(i + 1).isEmpty) fillRight(i + 1)
-        if (!rwings(i + 1).isEmpty) {
-          val borrow = rwings(i + 1).popLast()
-          val borrowshaken = shakeLeft(borrow)
+      def fillHole() {
+        val borrow = rwings(i + 1).popLast()
+        val borrowshaken = shakeLeft(borrow)
+        if (borrowshaken.level == borrow.level) {
           rwings(borrowshaken.right.level).pushHead(borrowshaken.right)
           rwings(borrowshaken.left.level).pushHead(borrowshaken.left)
+        } else {
+          rwings(borrowshaken.level).pushHead(borrowshaken)
         }
+      }
+      if ((i + 1) < rwings.length) {
+        if (rwings(i + 1).isEmpty) {
+          fillRight(i + 1)
+          printWings("recursive fill right", i + 1)
+          if (rwings(i).isEmpty && rwings(i + 1).nonEmpty) fillHole()
+        } else fillHole()
       }
     }
 
@@ -1162,7 +1216,7 @@ object ConcOps {
         i += 1
       }
 
-      rend = math.max(0, rwings.indexWhere(_.isEmpty) - 1)
+      updateRightEnd()
     }
 
     def pushDownRight(i: Int) {
@@ -1190,7 +1244,7 @@ object ConcOps {
       while (i <= rend) {
         while (rwings(i).size > 3) {
           val left = rwings(i).popHead()
-          val right = lwings(i).popHead()
+          val right = rwings(i).popHead()
           val carry = new <>(left, right)
           printWings("carry right up", i)
           rwings(i + 1).pushLast(carry)
@@ -1198,32 +1252,32 @@ object ConcOps {
         i += 1
       }
 
-      rend = math.max(0, rwings.indexWhere(_.isEmpty) - 1)
+      updateRightEnd()
     }
 
     spreadFillLeft()
     spreadFillRight()
     compactCarryLeft()
     compactCarryRight()
-    do {
+    while (math.abs(lend - rend) > 1) {
       while (math.abs(lend - rend) > 1) {
         if (lend > rend) {
           val borrow = lwings(lend).popLast()
           rwings(lend).pushHead(borrow)
           rend = lend
           spreadFillRight()
-          lend = math.max(0, lwings.indexWhere(_.isEmpty) - 1)
+          updateLeftEnd()
         } else {
           val borrow = rwings(rend).popHead()
           lwings(rend).pushLast(borrow)
           lend = rend
           spreadFillLeft()
-          rend = math.max(0, rwings.indexWhere(_.isEmpty) - 1)
+          updateRightEnd()
         }
       }
       compactCarryLeft()
       compactCarryRight()
-    } while (math.abs(lend - rend) > 1)
+    }
 
     def asNum(b: ConqueueBuffer[Conc[T]]): Num[T] = {
       import Conc.Single
@@ -1243,9 +1297,9 @@ object ConcOps {
     }
 
     printWings("END", 0)
-    println("ends: " + (lend, rend))
-    println("=====================================")
-    println("")
+    if (log.on) log("ends: " + (lend, rend))
+    if (log.on) log("=====================================")
+    if (log.on) log("")
     zip(
       lwings.map(asNum).take(math.min(lend, rend) + 1).toList,
       rwings.map(asNum).take(math.min(lend, rend) + 1).toList,
@@ -1253,6 +1307,34 @@ object ConcOps {
       else if (lend < rend) asNum(rwings(rend))
       else Zero
     )
+  }
+
+  trait Log {
+    def apply(x: AnyRef): Unit
+    def on: Boolean
+    def clear() {}
+    def flush() {}
+  }
+
+  object noLog extends Log {
+    def apply(x: AnyRef) {}
+    def on = false
+  }
+
+  object printLog extends Log {
+    def apply(x: AnyRef) = println(x.toString)
+    def on = true
+  }
+
+  def bufferedLog(proxy: Log) = new Log {
+    val buffer = collection.mutable.Buffer[String]()
+    def apply(x: AnyRef) = buffer += x.toString
+    def on = true
+    override def clear() = buffer.clear()
+    override def flush() {
+      proxy(buffer.mkString("\n"))
+      clear()
+    }
   }
 
 }
