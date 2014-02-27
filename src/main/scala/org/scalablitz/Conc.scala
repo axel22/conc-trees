@@ -1071,8 +1071,27 @@ object ConcOps {
   }
 
   private def unwrap[T](xs: <>[T]): Conqueue[T] = {
-    def unwrapLeft(xs: Conc[T], tail: (Int, List[Num[T]])): (Int, List[Num[T]]) = {
-      ???
+    def unwrapLeft(xs: Conc[T], acc: (Int, List[Num[T]])): (Int, List[Num[T]]) = {
+      val rank = acc._1
+      val tail = acc._2
+      tail match {
+        case Nil if xs.level > 2 =>
+          val shakenxs = shakeRight(xs)
+          unwrapLeft(xs.right, unwrapLeft(xs.left, acc))
+        case Nil if xs.level == 2 =>
+          xs match {
+            case (ll <> lr) <> (rl <> rr) =>
+              unwrapLeft(xs.left, (1, Zero :: Two(rl, rr) :: Nil))
+            case (ll <> lr) <> r =>
+              (1, Zero :: Three(ll, lr, r) :: Nil)
+            case l <> (rl <> rr) =>
+              (1, Zero :: Three(l, rl, rr) :: Nil)
+          }
+        case Nil if xs.level == 1 =>
+          (1, Zero :: Two(xs.left, xs.right) :: Nil)
+        case Nil =>
+          invalid(s"The conc is too small: ${xs.level}, $xs")
+      }
     }
 
     def unwrapRight(xs: Conc[T], tail: (Int, List[Num[T]])): (Int, List[Num[T]]) = {
