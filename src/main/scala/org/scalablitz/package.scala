@@ -32,4 +32,5 @@ package object scalablitz {
     }
     def :+(y: T) = ConcOps.appendTop(self, new Conc.Single(y))
   }
+
 }

@@ -1061,17 +1061,52 @@ object ConcOps {
 
   def toLazyConqueue[T](xs: Conc[T]): Conqueue.Lazy[T] = Lazy(Nil, toConqueue(xs), Nil)
 
-  def toConqueue[T](xs: Conc[T], log: Log = noLog): Conqueue[T] = xs match {
+  def toConqueue[T](xs: Conc[T]): Conqueue[T] = xs match {
     case conq: Conqueue[T] => conq
     case Append(_, _) => toConqueue(xs.normalized)
     case num: Num[T] => toConqueue(num.normalized)
     case Empty => Tip(Zero)
     case leaf: Leaf[T] => Tip(One(leaf))
-    case xs @ _ <> _ => unwrap(xs, log)
+    case xs @ _ <> _ => unwrap(xs)
   }
 
   private def unwrap[T](xs: <>[T]): Conqueue[T] = {
-    ???
+    def unwrapLeft(xs: Conc[T], tail: (Int, List[Num[T]])): (Int, List[Num[T]]) = {
+      ???
+    }
+
+    def unwrapRight(xs: Conc[T], tail: (Int, List[Num[T]])): (Int, List[Num[T]]) = {
+      ???
+    }
+
+    def zip(lstack: List[Num[T]], rstack: List[Num[T]]): Conqueue[T] = (lstack, rstack) match {
+      case (lwing :: ltail, rwing :: rtail) => new Spine(lwing, rwing, zip(ltail, rtail))
+      case (Nil, Nil) => Tip(Zero)
+      case (tip :: Nil, Nil) => Tip(tip)
+      case (Nil, tip :: Nil) => Tip(tip)
+    }
+
+    @tailrec def balance(lstack: List[Num[T]], rstack: List[Num[T]]): Conqueue[T] = {
+      val llen = lstack.length
+      val rlen = rstack.length
+      if (llen - rlen > 1) {
+        val nrstack = unwrapRight(lstack.head.rightmost, (rstack.head.leftmost.level, rstack))._2
+        val nlstack = lstack.head match {
+          case One(_) => lstack.tail
+          case number => noBorrowPopLast(number) :: lstack.tail
+        }
+        balance(nlstack, nrstack)
+      } else if (rlen - llen > 1) {
+        val nlstack = unwrapLeft(rstack.head.leftmost, (lstack.head.rightmost.level, lstack))._2
+        val nrstack = rstack.head match {
+          case One(_) => rstack.tail
+          case number => noBorrowPopHead(number) :: rstack.tail
+        }
+        balance(nlstack, nrstack)
+      } else zip(lstack.reverse, rstack.reverse)
+    }
+
+    balance(unwrapLeft(xs.left, (0, Nil))._2, unwrapRight(xs.left, (0, Nil))._2)
   }
 
 }
