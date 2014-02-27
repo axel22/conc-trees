@@ -217,6 +217,16 @@ object ConcOps {
     case Four(_, _, _, _) => invalid("never four.")
   }
 
+  private def mkstrn[T](c: Conc[Conc[T]]) = toSeq(c).map(mkstr).mkString("[", ", ", "]")
+
+  def nestedContentsFormatter[T](num: Num[Conc[T]]): String = num match {
+    case Zero => s"Zero"
+    case One(_1) => s"One(${mkstrn(_1)})"
+    case Two(_1, _2) => s"Two(${mkstrn(_1)}, ${mkstrn(_2)})"
+    case Three(_1, _2, _3) => s"Three(${mkstrn(_1)}, ${mkstrn(_2)}, ${mkstrn(_3)}})"
+    case Four(_, _, _, _) => invalid("never four.")
+  }
+
   def queueString[T](conq: Conqueue[T], showNum: Num[T] => String = levelFormatter _, spacing: Int = 80): String = {
     val buffer = new StringBuffer
 
@@ -1071,9 +1081,9 @@ object ConcOps {
     def printWings(label: String, i: Int) {
       if (log.on) {
         log("=====> State of wings: " + label + ", " + i)
-        log(lwings.map(_.toConqueue).map(x => queueString(x, contentsFormatter)).mkString("\n"))
+        log(lwings.map(_.toConqueue).map(x => queueString(x, nestedContentsFormatter)).mkString("\n"))
         log("--------------")
-        log(rwings.map(_.toConqueue).map(x => queueString(x, contentsFormatter)).mkString("\n"))
+        log(rwings.map(_.toConqueue).map(x => queueString(x, nestedContentsFormatter)).mkString("\n"))
         log("--------------")
       }
     }
