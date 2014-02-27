@@ -192,13 +192,14 @@ object ConcOps {
 
   private def str[T](num: Num[T]): String = num match {
     case Zero => "Zero"
+    case One(_1) if _1.level == 0 || (_1.left.level == _1.right.level) => s"One*(${_1.level})"
     case One(_1) => s"One(${_1.level})"
     case Two(_1, _2) => s"Two(${_1.level}, ${_2.level})"
     case Three(_1, _2, _3) => s"Three(${_1.level}, ${_2.level}, ${_3.level})"
     case Four(_1, _2, _3, _4) => s"Four(${_1.level}, ${_2.level}, ${_3.level}, ${_4.level})"
   }
 
-  def queueString[T](conq: Conqueue[T], showNum: Num[T] => String = str _): String = {
+  def queueString[T](conq: Conqueue[T], showNum: Num[T] => String = str _, spacing: Int = 80): String = {
     val buffer = new StringBuffer
 
     def traverse(rank: Int, indent: Int, conq: Conqueue[T]): Unit = (conq: @unchecked) match {
@@ -214,7 +215,7 @@ object ConcOps {
         buffer.append(" " * (indent) + tips)
     }
 
-    traverse(0, 40, conq)
+    traverse(0, spacing, conq)
     buffer.toString
   }
 
@@ -1049,42 +1050,207 @@ object ConcOps {
     lwings(lend).pushHead(xs.left)
     rwings(rend).pushHead(xs.right)
 
-    def spreadLeft() {
-      ???
+    def printWings(label: String, i: Int) {
+      println("=====> State of wings: " + label + ", " + i)
+      println(lwings.map(_.toConqueue).mkString("\n"))
+      println("--------------")
+      println(rwings.map(_.toConqueue).mkString("\n"))
+      println("--------------")
     }
 
-    def spreadRight() {
-      ???
-    }
-
-    spreadLeft()
-    spreadRight()
-    while (math.abs(lend - rend) > 1) {
-      if (lend > rend) {
-        val borrow = lwings(lend).popLast()
-        rwings(lend).pushHead(borrow)
-        rend = lend
-        spreadRight()
-      } else {
-        val borrow = rwings(rend).popHead()
-        rwings(rend).pushLast(borrow)
-        lend = rend
-        spreadLeft()
+    def fillLeft(i: Int) {
+      if ((i + 1) < lwings.length) {
+        if (lwings(i + 1).isEmpty) fillLeft(i + 1)
+        if (!lwings(i + 1).isEmpty) {
+          val borrow = lwings(i + 1).popHead()
+          val borrowshaken = shakeRight(borrow)
+          lwings(borrowshaken.left.level).pushLast(borrowshaken.left)
+          lwings(borrowshaken.right.level).pushLast(borrowshaken.right)
+        }
       }
     }
 
-    def asNum(b: ConqueueBuffer[Conc[T]]): Num[T] = ???
+    def spreadFillLeft() {
+      // spread down
+      var i = lend
+      while (i >= 0) {
+        if (lwings(i).isEmpty) fillLeft(i)
+        printWings("left down", i)
+        i -= 1
+      }
+
+      // fill up
+      i = 0
+      while (i < lend) {
+        if (lwings(i).isEmpty) fillLeft(i)
+        printWings("left up", i)
+        i += 1
+      }
+
+      lend = math.max(0, lwings.indexWhere(_.isEmpty) - 1)
+    }
+
+    def dangerous(wings: Array[ConqueueBuffer[Conc[T]]], i: Int) = {
+      if ((i + 1) < wings.length) {
+        def imbalanced(c: Conc[T]) = c.level > 0 && c.left.level != c.right.level
+        wings(i).size == 1 && imbalanced(wings(i).head) && wings(i + 1).size == 1 && imbalanced(wings(i + 1).head)
+      } else false
+    }
+
+    def pushDownLeft(i: Int) {
+      val borrow = lwings(i).popHead()
+      val borrowshaken = shakeRight(borrow)
+      if (i > 1 && borrowshaken.left.level != borrowshaken.right.level) pushDownLeft(i - 1)
+      fillLeft(i - 1)
+    }
+
+    def compactCarryLeft() {
+      // compact up
+      var i = 0
+      while (i < lend) {
+        if (lwings(i).isEmpty) fillLeft(i)
+        else if (dangerous(lwings, i)) {
+          pushDownLeft(i)
+          fillLeft(i)
+        }
+        printWings("compact left up", i)
+        i += 1
+      }
+
+      // carry up
+      i = 0
+      while (i <= lend) {
+        while (lwings(i).size > 3) {
+          val right = lwings(i).popLast()
+          val left = lwings(i).popLast()
+          val carry = new <>(left, right)
+          lwings(i + 1).pushHead(carry)
+        }
+        printWings("carry left up", i)
+        i += 1
+      }
+
+      lend = math.max(0, lwings.indexWhere(_.isEmpty) - 1)
+    }
+
+    def fillRight(i: Int) {
+      if ((i + 1) < rwings.length) {
+        if (rwings(i + 1).isEmpty) fillRight(i + 1)
+        if (!rwings(i + 1).isEmpty) {
+          val borrow = rwings(i + 1).popLast()
+          val borrowshaken = shakeLeft(borrow)
+          rwings(borrowshaken.right.level).pushHead(borrowshaken.right)
+          rwings(borrowshaken.left.level).pushHead(borrowshaken.left)
+        }
+      }
+    }
+
+    def spreadFillRight() {
+      // spread down
+      var i = rend
+      while (i >= 0) {
+        if (rwings(i).isEmpty) fillRight(i)
+        printWings("right down", i)
+        i -= 1
+      }
+
+      // fill up
+      i = 0
+      while (i < rend) {
+        if (rwings(i).isEmpty) fillRight(i)
+        printWings("right up", i)
+        i += 1
+      }
+
+      rend = math.max(0, rwings.indexWhere(_.isEmpty) - 1)
+    }
+
+    def pushDownRight(i: Int) {
+      val borrow = rwings(i).popLast()
+      val borrowshaken = shakeLeft(borrow)
+      if (i > 1 && borrowshaken.left.level != borrowshaken.right.level) pushDownRight(i - 1)
+      fillRight(i - 1)
+    }
+
+    def compactCarryRight() {
+      // compact up
+      var i = 0
+      while (i < rend) {
+        if (rwings(i).isEmpty) fillRight(i)
+        else if (dangerous(rwings, i)) {
+          pushDownRight(i)
+          fillRight(i)
+        }
+        printWings("compact right up", i)
+        i += 1
+      }
+
+      // carry up
+      i = 0
+      while (i <= rend) {
+        while (rwings(i).size > 3) {
+          val left = rwings(i).popHead()
+          val right = lwings(i).popHead()
+          val carry = new <>(left, right)
+          printWings("carry right up", i)
+          rwings(i + 1).pushLast(carry)
+        }
+        i += 1
+      }
+
+      rend = math.max(0, rwings.indexWhere(_.isEmpty) - 1)
+    }
+
+    spreadFillLeft()
+    spreadFillRight()
+    compactCarryLeft()
+    compactCarryRight()
+    do {
+      while (math.abs(lend - rend) > 1) {
+        if (lend > rend) {
+          val borrow = lwings(lend).popLast()
+          rwings(lend).pushHead(borrow)
+          rend = lend
+          spreadFillRight()
+          lend = math.max(0, lwings.indexWhere(_.isEmpty) - 1)
+        } else {
+          val borrow = rwings(rend).popHead()
+          lwings(rend).pushLast(borrow)
+          lend = rend
+          spreadFillLeft()
+          rend = math.max(0, rwings.indexWhere(_.isEmpty) - 1)
+        }
+      }
+      compactCarryLeft()
+      compactCarryRight()
+    } while (math.abs(lend - rend) > 1)
+
+    def asNum(b: ConqueueBuffer[Conc[T]]): Num[T] = {
+      import Conc.Single
+      b.compressSmall()
+      (b.toConqueue: @unchecked) match {
+        case Tip(Zero) => Zero
+        case Tip(One(s: Single[Conc[T]])) => One(s.x)
+        case Tip(Two(s1: Single[Conc[T]], s2: Single[Conc[T]])) => Two(s1.x, s2.x)
+        case Tip(Three(s1: Single[Conc[T]], s2: Single[Conc[T]], s3: Single[Conc[T]])) => Three(s1.x, s2.x, s3.x)
+        case _ => invalid("Buffer should be just a tip by now: " + b.toConqueue + ", " + b.size)
+      }
+    }
 
     def zip(lwings: List[Num[T]], rwings: List[Num[T]], tip: Num[T]): Conqueue[T] = {
       if (lwings.isEmpty) Tip(tip)
       else new Spine(lwings.head, rwings.head, zip(lwings.tail, rwings.tail, tip))
     }
 
+    printWings("END", 0)
+    println("ends: " + (lend, rend))
+    println("=====================================")
+    println("")
     zip(
-      lwings.map(asNum).take(math.min(lend, rend)).toList,
-      rwings.map(asNum).take(math.min(lend, rend)).toList,
+      lwings.map(asNum).take(math.min(lend, rend) + 1).toList,
+      rwings.map(asNum).take(math.min(lend, rend) + 1).toList,
       if (lend > rend) asNum(lwings(lend))
-      else if (lend < rend) asNum(lwings(rend))
+      else if (lend < rend) asNum(rwings(rend))
       else Zero
     )
   }
@@ -1094,10 +1260,23 @@ object ConcOps {
 
 class ConqueueBuffer[@specialized(Byte, Char, Int, Long, Float, Double) T: ClassTag](isLazy: Boolean = true) {
   import Conc._
+  import Conqueue._
 
-  private var conqueue: Conqueue[T] = if (isLazy) Conqueue.Lazy(Nil, Conqueue.empty, Nil) else Conqueue.empty
+  private var conqueue: Conqueue[T] = if (isLazy) Lazy(Nil, Conqueue.empty, Nil) else Conqueue.empty
 
   def size = conqueue.size
+
+  def isEmpty = conqueue match {
+    case Lazy(_, Tip(Zero), _) => true
+    case Tip(Zero) => true
+    case _ => false
+  }
+
+  def nonEmpty = !isEmpty
+
+  def head = ConcOps.head(conqueue).asInstanceOf[Single[T]].x
+
+  def last = ConcOps.last(conqueue).asInstanceOf[Single[T]].x
 
   def pushHead(elem: T): this.type = {
     conqueue = ConcOps.pushHeadTop(conqueue, new Single(elem))
@@ -1119,6 +1298,18 @@ class ConqueueBuffer[@specialized(Byte, Char, Int, Long, Float, Double) T: Class
     val last = ConcOps.last(conqueue)
     conqueue = ConcOps.popLastTop(conqueue)
     last.asInstanceOf[Single[T]].x
+  }
+
+  def compressSmall() {
+    if (size < 4) {
+      var nconqueue = Conqueue.empty[T]
+      while (this.nonEmpty) {
+        val last = ConcOps.last(conqueue)
+        nconqueue = ConcOps.pushHead(nconqueue, last)
+        conqueue = ConcOps.popLast(conqueue)
+      }
+      conqueue = nconqueue
+    }
   }
 
   def toConqueue = conqueue

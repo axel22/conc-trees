@@ -395,6 +395,42 @@ object ConcChecks extends Properties("Conc") with ConcSnippets {
     )
   }
 
+  def mkstr[T](c: Conc[T]) = toSeq(c).mkString("[", ", ", "]")
+
+  def numFormatter[T](num: Num[T]): String = num match {
+    case Zero => s"Zero"
+    case One(_1) => s"One(${mkstr(_1)})"
+    case Two(_1, _2) => s"Two(${mkstr(_1)}, ${mkstr(_2)})"
+    case Three(_1, _2, _3) => s"Three(${mkstr(_1)}, ${mkstr(_2)}, ${mkstr(_3)}})"
+    case Four(_, _, _, _) => invalid("never four.")
+  }
+
+  property("conqueue normalized toConqueue") = forAll(queues(5)) { conq =>
+    var conq2string: String = null
+    try {
+      val normalized = conq.normalized
+      val conq2 = ConcOps.toConqueue(normalized)
+      val conqseq = toSeq(conq)
+      val conq2seq = toSeq(conq2)
+      conq2string = ConcOps.queueString(conq2, numFormatter)
+      //println(ConcOps.queueString(conq2))
+      //println("------------------")
+      all(
+        s"Conqueue invariants met: ${ConcOps.queueString(conq2, numFormatter)}" |: checkConqueueInvs(conq2, 0),
+        s"Normalization was correct." |: conqseq == toSeq(normalized),
+        s"Represents the same sequence:\n$conqseq\n---- vs ----\n$conq2seq\n" +
+        s"Original conqueues:\n${ConcOps.queueString(conq, numFormatter)}\n" +
+        s"---- vs ----\n" +
+        s"${ConcOps.queueString(conq2, numFormatter)}\n" +
+        s"; length: ${conqseq.length} vs ${conq2seq.length}" |: conqseq == conq2seq
+      )
+    } catch {
+      case t: Throwable =>
+        s"toString: $conq2string \n" +
+        s"Should not cause exceptions: $t\n${t.getStackTrace.mkString("\n")}" |: false
+    }
+  }
+
 }
 
 
