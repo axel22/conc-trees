@@ -1070,62 +1070,161 @@ object ConcOps {
     case xs @ _ <> _ => unwrap(xs)
   }
 
+  case class Partial[T](rank: Int, bucket: List[Conc[T]], stack: List[Num[T]])
+
   private def unwrap[T](xs: <>[T]): Conqueue[T] = {
-    def unwrapLeft(xs: Conc[T], acc: (Int, List[Num[T]])): (Int, List[Num[T]]) = {
-      val rank = acc._1
-      val tail = acc._2
-      tail match {
-        case Nil if xs.level > 2 =>
-          val shakenxs = shakeRight(xs)
-          unwrapLeft(xs.right, unwrapLeft(xs.left, acc))
-        case Nil if xs.level == 2 =>
-          xs match {
-            case (ll <> lr) <> (rl <> rr) =>
-              unwrapLeft(xs.left, (1, Zero :: Two(rl, rr) :: Nil))
-            case (ll <> lr) <> r =>
-              (1, Zero :: Three(ll, lr, r) :: Nil)
-            case l <> (rl <> rr) =>
-              (1, Zero :: Three(l, rl, rr) :: Nil)
+    def toNum(bucket: List[Conc[T]]): Num[T] = bucket match {
+      case Nil => Zero
+      case _1 :: Nil => One(_1)
+      case _1 :: _2 :: Nil => Two(_1, _2)
+      case _1 :: _2 :: _3 :: Nil => Three(_1, _2, _3)
+      case _ => invalid("Number too large.")
+    }
+
+    def unwrapLeft(xs: Conc[T], part: Partial[T]): Partial[T] = {
+      def pack(rank: Int, bucket: List[Conc[T]], stack: List[Num[T]]): Partial[T] = {
+        def hi(c: Conc[T]) = c.level == rank - 1
+        def lo(c: Conc[T]) = c.level == rank - 2
+        def packed(bucket: List[Conc[T]]): Num[T] = (bucket: @unchecked) match {
+          case c1 :: c2 :: c3 :: c4 :: Nil =>
+            if ((hi(c3) || hi(c4)) && (hi(c1) || hi(c2))) Two(c4 <> c3, c2 <> c1)
+            else Zero
+          case c1 :: c2 :: c3 :: c4 :: c5 :: Nil =>
+            if (hi(c4) || hi(c5)) {
+              if (lo(c2) && lo(c3)) Two(c5 <> c4, (c3 <> c2) <> c1)
+              else invalid(s"This configuration should never happen: $bucket")
+            } else {
+              if (hi(c1) || hi(c2)) Two((c5 <> c4) <> c3, c2 <> c1)
+              else Zero
+            }
+          case c1 :: c2 :: c3 :: c4 :: c5 :: c6 :: Nil =>
+            if (hi(c5) || hi(c6)) invalid(s"This configuration should never happen: $bucket")
+            else if (hi(c3) || hi(c2)) invalid(s"This configuration should never happen: $bucket")
+            else Two((c6 <> c5) <> c4, (c3 <> c2) <> c1)
+          case _ =>
+            invalid(s"Cannot be called for this configuration: $bucket")
+        }
+
+        if (bucket.size < 4) Partial(rank, bucket, stack) else packed(bucket) match {
+          case Zero => Partial(rank, bucket, stack)
+          case num => Partial(rank + 1, Nil, num :: stack)
+        }
+      }
+
+      val shakenxs = shakeRight(xs)
+      part match {
+        case Partial(rank, bucket, stack) if xs.level >  rank + 1 =>
+          if (shakenxs.level != xs.level) unwrapLeft(shakenxs, part)
+          else {
+            val npart = unwrapLeft(shakenxs.left, part)
+            unwrapLeft(shakenxs.right, npart)
           }
-        case Nil if xs.level == 1 =>
-          (1, Zero :: Two(xs.left, xs.right) :: Nil)
-        case Nil =>
-          invalid(s"The conc is too small: ${xs.level}, $xs")
+        case Partial(rank, bucket, stack) if xs.level == rank + 1 =>
+          if (shakenxs.level != xs.level) unwrapLeft(shakenxs, part)
+          else {
+            val npart = pack(rank, shakenxs.left :: bucket, stack)
+            if (npart.rank <= shakenxs.right.level) unwrapLeft(shakenxs.right, npart)
+            else pack(npart.rank, shakenxs.right :: npart.bucket, npart.stack)
+          }
+        case Partial(rank, bucket, stack) if xs.level == rank =>
+          if (shakenxs.level != xs.level) pack(rank, shakenxs :: bucket, stack)
+          else {
+            val npart = pack(rank, shakenxs.left :: bucket, stack)
+            pack(npart.rank, shakenxs.right :: npart.bucket, npart.stack)
+          }
+        case _ =>
+          invalid("Unexpected unwrap case: ${xs.level} vs ${part.rank}")
       }
     }
 
-    def unwrapRight(xs: Conc[T], tail: (Int, List[Num[T]])): (Int, List[Num[T]]) = {
-      ???
+    def unwrapRight(xs: Conc[T], part: Partial[T]): Partial[T] = {
+      def pack(rank: Int, bucket: List[Conc[T]], stack: List[Num[T]]): Partial[T] = {
+        def hi(c: Conc[T]) = c.level == rank - 1
+        def lo(c: Conc[T]) = c.level == rank - 2
+        def packed(bucket: List[Conc[T]]): Num[T] = (bucket: @unchecked) match {
+          case c1 :: c2 :: c3 :: c4 :: Nil =>
+            if ((hi(c1) || hi(c2)) && (hi(c3) || hi(c4))) Two(c1 <> c2, c3 <> c4)
+            else Zero
+          case c1 :: c2 :: c3 :: c4 :: c5 :: Nil =>
+            if (hi(c4) || hi(c5)) {
+              if (lo(c2) && lo(c3)) Two(c1 <> (c2 <> c3), c4 <> c5)
+              else invalid(s"This configuration should never happen: $bucket")
+            } else {
+              if (hi(c1) || hi(c2)) Two(c1 <> c2, c3 <> (c4 <> c5))
+              else Zero
+            }
+          case c1 :: c2 :: c3 :: c4 :: c5 :: c6 :: Nil =>
+            if (hi(c5) || hi(c6)) invalid(s"This configuration should never happen: $bucket")
+            else if (hi(c3) || hi(c2)) invalid(s"This configuration should never happen: $bucket")
+            else Two(c1 <> (c2 <> c3), c4 <> (c5 <> c6))
+          case _ =>
+            invalid(s"Cannot be called for this configuration: $bucket")
+        }
+
+        if (bucket.size < 4) Partial(rank, bucket, stack) else packed(bucket) match {
+          case Zero => Partial(rank, bucket, stack)
+          case num => Partial(rank + 1, Nil, num :: stack)
+        }
+      }
+
+      val shakenxs = shakeLeft(xs)
+      part match {
+        case Partial(rank, bucket, stack) if xs.level >  rank + 1 =>
+          if (shakenxs.level != xs.level) unwrapRight(shakenxs, part)
+          else {
+            val npart = unwrapRight(shakenxs.right, part)
+            unwrapRight(shakenxs.left, npart)
+          }
+        case Partial(rank, bucket, stack) if xs.level == rank + 1 =>
+          if (shakenxs.level != xs.level) unwrapRight(shakenxs, part)
+          else {
+            val npart = pack(rank, shakenxs.right :: bucket, stack)
+            if (npart.rank <= shakenxs.left.level) unwrapRight(shakenxs.left, npart)
+            else pack(npart.rank, shakenxs.left :: npart.bucket, npart.stack)
+          }
+        case Partial(rank, bucket, stack) if xs.level == rank =>
+          if (shakenxs.level != xs.level) pack(rank, shakenxs :: bucket, stack)
+          else {
+            val npart = pack(rank, shakenxs.right :: bucket, stack)
+            pack(npart.rank, shakenxs.left :: npart.bucket, npart.stack)
+          }
+        case _ =>
+          invalid("Unexpected unwrap case: ${xs.level} vs ${part.rank}")
+      }
     }
 
-    def zip(lstack: List[Num[T]], rstack: List[Num[T]]): Conqueue[T] = (lstack, rstack) match {
-      case (lwing :: ltail, rwing :: rtail) => new Spine(lwing, rwing, zip(ltail, rtail))
-      case (Nil, Nil) => Tip(Zero)
-      case (tip :: Nil, Nil) => Tip(tip)
-      case (Nil, tip :: Nil) => Tip(tip)
+    def zip(rank: Int, lstack: List[Num[T]], rstack: List[Num[T]]): Conqueue[T] = (lstack, rstack) match {
+      case (lwing :: Nil, rwing :: rtip :: Nil) =>
+        new Spine(lwing, rwing, Tip(rtip)) // TODO fix
+      case (lwing :: ltip :: Nil, rwing :: Nil) =>
+        new Spine(lwing, rwing, Tip(ltip)) // TODO fix
+      case (lwing :: Nil, rwing :: Nil) =>
+        new Spine(lwing, rwing, Tip(Zero)) // TODO fix
+      case (lwing :: ltail, rwing :: rtail) =>
+        new Spine(lwing, rwing, zip(rank + 1, ltail, rtail))
     }
 
-    @tailrec def balance(lstack: List[Num[T]], rstack: List[Num[T]]): Conqueue[T] = {
-      val llen = lstack.length
-      val rlen = rstack.length
+    @tailrec def balance(lpart: Partial[T], rpart: Partial[T]): Conqueue[T] = {
+      val llen = lpart.stack.length
+      val rlen = rpart.stack.length
       if (llen - rlen > 1) {
-        val nrstack = unwrapRight(lstack.head.rightmost, (rstack.head.leftmost.level, rstack))._2
-        val nlstack = lstack.head match {
-          case One(_) => lstack.tail
-          case number => noBorrowPopLast(number) :: lstack.tail
+        def borrow(l: List[Num[T]]) = if (l.head.index == 1) l.tail else noBorrowPopLast(l.head) :: l.tail
+        val (nlpart, nrpart) = lpart.bucket match {
+          case Nil => (lpart.copy(stack = borrow(lpart.stack)), unwrapRight(lpart.stack.head.rightmost, rpart))
+          case x :: xs => (lpart.copy(bucket = xs), unwrapRight(x, rpart))
         }
-        balance(nlstack, nrstack)
+        balance(nlpart, nrpart)
       } else if (rlen - llen > 1) {
-        val nlstack = unwrapLeft(rstack.head.leftmost, (lstack.head.rightmost.level, lstack))._2
-        val nrstack = rstack.head match {
-          case One(_) => rstack.tail
-          case number => noBorrowPopHead(number) :: rstack.tail
+        def borrow(r: List[Num[T]]) = if (r.head.index == 1) r.tail else noBorrowPopHead(r.head) :: r.tail
+        val (nlpart, nrpart) = rpart.bucket match {
+          case Nil => (unwrapLeft(rpart.stack.head.leftmost, lpart), rpart.copy(stack = borrow(rpart.stack)))
+          case x :: xs => (unwrapLeft(x, lpart), rpart.copy(bucket = xs))
         }
-        balance(nlstack, nrstack)
-      } else zip(lstack.reverse, rstack.reverse)
+        balance(nlpart, nrpart)
+      } else zip(0, (toNum(lpart.bucket) :: lpart.stack).reverse, (toNum(rpart.bucket) :: rpart.stack).reverse)
     }
 
-    balance(unwrapLeft(xs.left, (0, Nil))._2, unwrapRight(xs.left, (0, Nil))._2)
+    balance(unwrapLeft(xs.left, Partial(0, Nil, Nil)), unwrapRight(xs.right, Partial(0, Nil, Nil)))
   }
 
 }
