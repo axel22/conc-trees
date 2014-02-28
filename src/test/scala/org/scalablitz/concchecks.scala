@@ -397,7 +397,7 @@ object ConcChecks extends Properties("Conc") with ConcSnippets {
 
   val numFormatter = ConcOps.contentsFormatter[Int] _
 
-  property("conqueue normalized toConqueue") = forAll(queues(3)) { conq =>
+  property("conqueue normalized toConqueue") = forAll(queues(12)) { conq =>
     var conq2string: String = null
     val log = ConcOps.bufferedLog(ConcOps.printLog)
     try {

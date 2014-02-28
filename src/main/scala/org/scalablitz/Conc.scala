@@ -1207,13 +1207,34 @@ object ConcOps {
       }
     }
 
+    def zipTip(rank: Int, lwing: Num[T], lrem: Conc[T], rwing: Num[T], rrem: Conc[T]): Conqueue[T] = {
+      val tipwannabe = lrem <> rrem
+      if (tipwannabe.level == rank + 1) new Spine(lwing, rwing, Tip(One(tipwannabe)))
+      else {
+        val borrowed = rwing.leftmost
+        val appended = tipwannabe <> borrowed
+        if (appended.level == borrowed.level) {
+          val nrwing = noCarryPushHead(noBorrowPopHead(rwing), appended)
+          new Spine(lwing, nrwing, Tip(Zero))
+        } else {
+          val nrwing = noBorrowPopHead(rwing)
+          new Spine(lwing, nrwing, Tip(One(appended)))
+        }
+      }
+    }
+
     def zip(rank: Int, lstack: List[Num[T]], rstack: List[Num[T]]): Conqueue[T] = (lstack, rstack) match {
-      case (lwing :: Nil, rwing :: rtip :: Nil) =>
-        new Spine(lwing, rwing, Tip(rtip)) // TODO fix
-      case (lwing :: ltip :: Nil, rwing :: Nil) =>
-        new Spine(lwing, rwing, Tip(ltip)) // TODO fix
-      case (lwing :: Nil, rwing :: Nil) =>
-        new Spine(lwing, rwing, Tip(Zero)) // TODO fix
+      case (One(lrem) :: Nil, rwing :: One(rrem) :: Nil) =>
+        new Spine(One(lrem), rwing, Tip(One(rrem))) // TODO fix
+      case (lwing :: One(lrem) :: Nil, One(rrem) :: Nil) =>
+        new Spine(lwing, One(rrem), Tip(One(lrem))) // TODO fix
+      case (lwing :: One(lrem) :: Nil, rwing :: One(rrem) :: Nil) =>
+        if (lrem.level == rank + 1 && rrem.level == rank + 1) new Spine(One(lrem), One(rrem), Tip(Zero))
+        else zipTip(rank, lwing, lrem, rwing, rrem)
+      case (One(lrem) :: Nil, One(rrem) :: Nil) =>
+        assert(lrem.level == 0)
+        assert(rrem.level == 0)
+        Tip(Two(lrem, rrem))
       case (lwing :: ltail, rwing :: rtail) =>
         new Spine(lwing, rwing, zip(rank + 1, ltail, rtail))
     }
@@ -1235,7 +1256,10 @@ object ConcOps {
           case x :: xs => (unwrapLeft(x, lpart), rpart.copy(bucket = xs))
         }
         balance(nlpart, nrpart)
-      } else zip(0, (toNum(lpart.bucket.reverse) :: lpart.stack).reverse, (toNum(rpart.bucket) :: rpart.stack).reverse)
+      } else {
+        def concat(cs: List[Conc[T]]): Num[T] = if (cs.isEmpty) One(Conc.Empty) else One(cs.reduceLeft(_ <> _))
+        zip(0, (concat(lpart.bucket.reverse) :: lpart.stack).reverse, (concat(rpart.bucket) :: rpart.stack).reverse)
+      }
     }
 
     balance(unwrapLeft(xs.left, Partial(0, Nil, Nil)), unwrapRight(xs.right, Partial(0, Nil, Nil)))
