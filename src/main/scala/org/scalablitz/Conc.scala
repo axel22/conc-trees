@@ -207,7 +207,7 @@ object ConcOps {
     case Four(_1, _2, _3, _4) => s"Four(${_1.level}, ${_2.level}, ${_3.level}, ${_4.level})"
   }
 
-  private def mkstr[T](c: Conc[T]) = toSeq(c).mkString("[", ", ", "]")
+  private def mkstr[T](c: Conc[T]) = toSeq(c).mkString(s"l${c.level}:[", ", ", "]")
 
   def contentsFormatter[T](num: Num[T]): String = num match {
     case Zero => s"Zero"
@@ -1061,18 +1061,18 @@ object ConcOps {
 
   def toLazyConqueue[T](xs: Conc[T]): Conqueue.Lazy[T] = Lazy(Nil, toConqueue(xs), Nil)
 
-  def toConqueue[T](xs: Conc[T]): Conqueue[T] = xs match {
+  def toConqueue[T](xs: Conc[T], log: Log = noLog): Conqueue[T] = xs match {
     case conq: Conqueue[T] => conq
     case Append(_, _) => toConqueue(xs.normalized)
     case num: Num[T] => toConqueue(num.normalized)
     case Empty => Tip(Zero)
     case leaf: Leaf[T] => Tip(One(leaf))
-    case xs @ _ <> _ => unwrap(xs)
+    case xs @ _ <> _ => unwrap(xs, log)
   }
 
   case class Partial[T](rank: Int, bucket: List[Conc[T]], stack: List[Num[T]])
 
-  private def unwrap[T](xs: <>[T]): Conqueue[T] = {
+  private def unwrap[T](xs: <>[T], log: Log = noLog): Conqueue[T] = {
     def toNum(bucket: List[Conc[T]]): Num[T] = bucket match {
       case Nil => Zero
       case _1 :: Nil => One(_1)
@@ -1105,9 +1105,14 @@ object ConcOps {
             invalid(s"Cannot be called for this configuration: $bucket")
         }
 
-        if (bucket.size < 4) Partial(rank, bucket, stack) else packed(bucket) match {
-          case Zero => Partial(rank, bucket, stack)
-          case num => Partial(rank + 1, Nil, num :: stack)
+        if (rank > 0) {
+          if (bucket.size < 4) Partial(rank, bucket, stack) else packed(bucket) match {
+            case Zero => Partial(rank, bucket, stack)
+            case num => Partial(rank + 1, Nil, num :: stack)
+          }
+        } else {
+          if (bucket.size == 2) Partial(1, Nil, Two(bucket(1), bucket(0)) :: Nil)
+          else Partial(0, bucket, Nil)
         }
       }
 
@@ -1122,16 +1127,18 @@ object ConcOps {
         case Partial(rank, bucket, stack) if xs.level == rank + 1 =>
           if (shakenxs.level != xs.level) unwrapLeft(shakenxs, part)
           else {
-            val npart = pack(rank, shakenxs.left :: bucket, stack)
+            val npart =
+              if (part.rank == shakenxs.left.level) unwrapLeft(shakenxs.left, part)
+              else pack(rank, shakenxs.left :: bucket, stack)
             if (npart.rank <= shakenxs.right.level) unwrapLeft(shakenxs.right, npart)
             else pack(npart.rank, shakenxs.right :: npart.bucket, npart.stack)
           }
         case Partial(rank, bucket, stack) if xs.level == rank =>
           if (shakenxs.level != xs.level) pack(rank, shakenxs :: bucket, stack)
-          else {
+          else if (shakenxs.level > 0) {
             val npart = pack(rank, shakenxs.left :: bucket, stack)
             pack(npart.rank, shakenxs.right :: npart.bucket, npart.stack)
-          }
+          } else pack(rank, shakenxs :: bucket, stack)
         case _ =>
           invalid("Unexpected unwrap case: ${xs.level} vs ${part.rank}")
       }
@@ -1161,9 +1168,14 @@ object ConcOps {
             invalid(s"Cannot be called for this configuration: $bucket")
         }
 
-        if (bucket.size < 4) Partial(rank, bucket, stack) else packed(bucket) match {
-          case Zero => Partial(rank, bucket, stack)
-          case num => Partial(rank + 1, Nil, num :: stack)
+        if (rank > 0) {
+          if (bucket.size < 4) Partial(rank, bucket, stack) else packed(bucket) match {
+            case Zero => Partial(rank, bucket, stack)
+            case num => Partial(rank + 1, Nil, num :: stack)
+          }
+        } else {
+          if (bucket.size == 2) Partial(1, Nil, Two(bucket(0), bucket(1)) :: Nil)
+          else Partial(0, bucket, Nil)
         }
       }
 
@@ -1178,16 +1190,18 @@ object ConcOps {
         case Partial(rank, bucket, stack) if xs.level == rank + 1 =>
           if (shakenxs.level != xs.level) unwrapRight(shakenxs, part)
           else {
-            val npart = pack(rank, shakenxs.right :: bucket, stack)
+            val npart =
+              if (part.rank == shakenxs.right.level) unwrapRight(shakenxs.right, part)
+              else pack(rank, shakenxs.right :: bucket, stack)
             if (npart.rank <= shakenxs.left.level) unwrapRight(shakenxs.left, npart)
             else pack(npart.rank, shakenxs.left :: npart.bucket, npart.stack)
           }
         case Partial(rank, bucket, stack) if xs.level == rank =>
           if (shakenxs.level != xs.level) pack(rank, shakenxs :: bucket, stack)
-          else {
+          else if (shakenxs.level != 0) {
             val npart = pack(rank, shakenxs.right :: bucket, stack)
             pack(npart.rank, shakenxs.left :: npart.bucket, npart.stack)
-          }
+          } else pack(rank, shakenxs :: bucket, stack)
         case _ =>
           invalid("Unexpected unwrap case: ${xs.level} vs ${part.rank}")
       }
@@ -1221,10 +1235,38 @@ object ConcOps {
           case x :: xs => (unwrapLeft(x, lpart), rpart.copy(bucket = xs))
         }
         balance(nlpart, nrpart)
-      } else zip(0, (toNum(lpart.bucket) :: lpart.stack).reverse, (toNum(rpart.bucket) :: rpart.stack).reverse)
+      } else zip(0, (toNum(lpart.bucket.reverse) :: lpart.stack).reverse, (toNum(rpart.bucket) :: rpart.stack).reverse)
     }
 
     balance(unwrapLeft(xs.left, Partial(0, Nil, Nil)), unwrapRight(xs.right, Partial(0, Nil, Nil)))
+  }
+
+  trait Log {
+    def apply(x: AnyRef): Unit
+    def on: Boolean
+    def clear() {}
+    def flush() {}
+  }
+
+  object noLog extends Log {
+    def apply(x: AnyRef) {}
+    def on = false
+  }
+
+  object printLog extends Log {
+    def apply(x: AnyRef) = println(x.toString)
+    def on = true
+  }
+
+  def bufferedLog(proxy: Log) = new Log {
+    val buffer = collection.mutable.Buffer[String]()
+    def apply(x: AnyRef) = buffer += x.toString
+    def on = true
+    override def clear() = buffer.clear()
+    override def flush() {
+      proxy(buffer.mkString("\n"))
+      clear()
+    }
   }
 
 }
