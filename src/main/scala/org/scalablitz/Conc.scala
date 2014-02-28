@@ -1139,8 +1139,12 @@ object ConcOps {
             val npart = pack(rank, shakenxs.left :: bucket, stack)
             pack(npart.rank, shakenxs.right :: npart.bucket, npart.stack)
           } else pack(rank, shakenxs :: bucket, stack)
+        case Partial(rank, bucket, stack) if xs.level == rank - 1 =>
+          pack(rank, xs :: bucket, stack)
+        case Partial(rank, bucket, stack) if xs.level == rank - 2 =>
+          pack(rank, xs :: bucket, stack)
         case _ =>
-          invalid("Unexpected unwrap case: ${xs.level} vs ${part.rank}")
+          invalid(s"Unexpected unwrap case: ${xs.level} vs ${part.rank}")
       }
     }
 
@@ -1202,35 +1206,61 @@ object ConcOps {
             val npart = pack(rank, shakenxs.right :: bucket, stack)
             pack(npart.rank, shakenxs.left :: npart.bucket, npart.stack)
           } else pack(rank, shakenxs :: bucket, stack)
+        case Partial(rank, bucket, stack) if xs.level == rank - 1 =>
+          pack(rank, xs :: bucket, stack)
+        case Partial(rank, bucket, stack) if xs.level == rank - 2 =>
+          pack(rank, xs :: bucket, stack)
         case _ =>
-          invalid("Unexpected unwrap case: ${xs.level} vs ${part.rank}")
+          invalid(s"Unexpected unwrap case: ${xs.level} vs ${part.rank}")
       }
     }
 
+    // zipping around the tip is super-mega-annoying
     def zipTip(rank: Int, lwing: Num[T], lrem: Conc[T], rwing: Num[T], rrem: Conc[T]): Conqueue[T] = {
-      val tipwannabe = lrem <> rrem
-      if (tipwannabe.level == rank + 1) new Spine(lwing, rwing, Tip(One(tipwannabe)))
-      else {
-        val borrowed = rwing.leftmost
-        val appended = tipwannabe <> borrowed
-        if (appended.level == borrowed.level) {
-          val nrwing = noCarryPushHead(noBorrowPopHead(rwing), appended)
-          new Spine(lwing, nrwing, Tip(Zero))
+      // note: `lrem` and `rrem` can have level at most `rank + 1`, and not more
+      if (lrem.level == rank + 1 && rrem.level == rank + 1) {
+        new Spine(lwing, rwing, Tip(Two(lrem, rrem)))
+      } else if (lrem.level == rank + 1) {
+        val rborrow = rwing.leftmost
+        val rconcat = rrem <> rborrow
+        if (rconcat.level == rborrow.level) {
+          val nrwing = noCarryPushHead(noBorrowPopHead(rwing), rconcat)
+          new Spine(lwing, nrwing, Tip(One(lrem)))
         } else {
           val nrwing = noBorrowPopHead(rwing)
-          new Spine(lwing, nrwing, Tip(One(appended)))
+          new Spine(lwing, nrwing, Tip(Two(lrem, rconcat)))
+        }
+      } else if (rrem.level == rank + 1) {
+        val lborrow = lwing.rightmost
+        val lconcat = lborrow <> lrem
+        if (lconcat.level == lborrow.level) {
+          val nlwing = noCarryPushLast(noBorrowPopLast(lwing), lconcat)
+          new Spine(nlwing, rwing, Tip(One(rrem)))
+        } else {
+          val nlwing = noBorrowPopLast(lwing)
+          new Spine(nlwing, rwing, Tip(Two(lconcat, rrem)))
+        }
+      } else {
+        // note that the tip level can at this point be at most `rank + 1`
+        val tipwannabe = lrem <> rrem
+        if (tipwannabe.level == rank + 1) new Spine(lwing, rwing, Tip(One(tipwannabe)))
+        else {
+          val rborrow = rwing.leftmost
+          val rconcat = tipwannabe <> rborrow
+          if (rconcat.level == rborrow.level) {
+            val nrwing = noCarryPushHead(noBorrowPopHead(rwing), rconcat)
+            new Spine(lwing, nrwing, Tip(Zero))
+          } else {
+            val nrwing = noBorrowPopHead(rwing)
+            new Spine(lwing, nrwing, Tip(One(rconcat)))
+          }
         }
       }
     }
 
     def zip(rank: Int, lstack: List[Num[T]], rstack: List[Num[T]]): Conqueue[T] = (lstack, rstack) match {
-      case (One(lrem) :: Nil, rwing :: One(rrem) :: Nil) =>
-        new Spine(One(lrem), rwing, Tip(One(rrem))) // TODO fix
-      case (lwing :: One(lrem) :: Nil, One(rrem) :: Nil) =>
-        new Spine(lwing, One(rrem), Tip(One(lrem))) // TODO fix
       case (lwing :: One(lrem) :: Nil, rwing :: One(rrem) :: Nil) =>
-        if (lrem.level == rank + 1 && rrem.level == rank + 1) new Spine(One(lrem), One(rrem), Tip(Zero))
-        else zipTip(rank, lwing, lrem, rwing, rrem)
+        zipTip(rank, lwing, lrem, rwing, rrem)
       case (One(lrem) :: Nil, One(rrem) :: Nil) =>
         assert(lrem.level == 0)
         assert(rrem.level == 0)
@@ -1242,14 +1272,14 @@ object ConcOps {
     @tailrec def balance(lpart: Partial[T], rpart: Partial[T]): Conqueue[T] = {
       val llen = lpart.stack.length
       val rlen = rpart.stack.length
-      if (llen - rlen > 1) {
+      if (llen > rlen) {
         def borrow(l: List[Num[T]]) = if (l.head.index == 1) l.tail else noBorrowPopLast(l.head) :: l.tail
         val (nlpart, nrpart) = lpart.bucket match {
           case Nil => (lpart.copy(stack = borrow(lpart.stack)), unwrapRight(lpart.stack.head.rightmost, rpart))
           case x :: xs => (lpart.copy(bucket = xs), unwrapRight(x, rpart))
         }
         balance(nlpart, nrpart)
-      } else if (rlen - llen > 1) {
+      } else if (rlen > llen) {
         def borrow(r: List[Num[T]]) = if (r.head.index == 1) r.tail else noBorrowPopHead(r.head) :: r.tail
         val (nlpart, nrpart) = rpart.bucket match {
           case Nil => (unwrapLeft(rpart.stack.head.leftmost, lpart), rpart.copy(stack = borrow(rpart.stack)))
@@ -1258,7 +1288,9 @@ object ConcOps {
         balance(nlpart, nrpart)
       } else {
         def concat(cs: List[Conc[T]]): Num[T] = if (cs.isEmpty) One(Conc.Empty) else One(cs.reduceLeft(_ <> _))
-        zip(0, (concat(lpart.bucket.reverse) :: lpart.stack).reverse, (concat(rpart.bucket) :: rpart.stack).reverse)
+        val lwings = (concat(lpart.bucket.reverse) :: lpart.stack).reverse
+        val rwings = (concat(rpart.bucket) :: rpart.stack).reverse
+        zip(0, lwings, rwings)
       }
     }
 
