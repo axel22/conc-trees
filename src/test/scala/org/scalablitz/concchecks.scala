@@ -399,17 +399,19 @@ object ConcChecks extends Properties("Conc") with ConcSnippets {
 
   property("conqueue normalized toConqueue") = forAll(queues(12)) { conq =>
     var conq2string: String = null
+    var simplestring: String = null
     val log = ConcOps.bufferedLog(ConcOps.printLog)
     try {
       val normalized = conq.normalized
       val conq2 = ConcOps.toConqueue(normalized, log)
       val conqseq = toSeq(conq)
       val conq2seq = toSeq(conq2)
+      simplestring = ConcOps.queueString(conq2, ConcOps.levelFormatter[Int] _)
       conq2string = ConcOps.queueString(conq2, numFormatter)
       //println(ConcOps.queueString(conq2))
       //println("------------------")
       all(
-        //s"Conqueue invariants met: ${ConcOps.queueString(conq2, numFormatter)}" |: checkConqueueInvs(conq2, 0),
+        s"Conqueue invariants met:\n$simplestring" |: checkConqueueInvs(conq2, 0),
         s"Normalization was correct." |: conqseq == toSeq(normalized),
         s"log: ${log.buffer.mkString("\n")}\n" +
         s"Represents the same sequence:\n$conqseq\n---- vs ----\n$conq2seq\n" +
@@ -421,7 +423,7 @@ object ConcChecks extends Properties("Conc") with ConcSnippets {
     } catch {
       case t: Throwable =>
         s"log: ${log.flush()}\n" +
-        s"toString: $conq2string \n" +
+        s"toString:\n$simplestring \n" +
         s"Should not cause exceptions: $t\n${t.getStackTrace.mkString("\n")}" |: false
     }
   }
