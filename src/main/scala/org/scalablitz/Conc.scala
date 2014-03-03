@@ -66,7 +66,7 @@ object ConcRope {
 
 sealed abstract class Conqueue[+T] extends Conc[T] {
   def evaluated: Boolean
-  def tail: Conqueue[T]
+  def rear: Conqueue[T]
   def addIfUnevaluated[U >: T](stack: List[Conqueue.Spine[U]]): List[Conqueue.Spine[U]] = stack
 }
 
@@ -81,12 +81,12 @@ object Conqueue {
     def level = queue.level
     def size = queue.size
     def evaluated = unsupported("Undefined for lazy conqueue.")
-    def tail = unsupported("Undefined for lazy conqueue.")
+    def rear = unsupported("Undefined for lazy conqueue.")
     override def normalized = queue.normalized
   }
 
   class Spine[+T](val lwing: Num[T], val rwing: Num[T], @volatile var evaluateTail: AnyRef) extends Conqueue[T] {
-    lazy val tail: Conqueue[T] = {
+    lazy val rear: Conqueue[T] = {
       val t = (evaluateTail: @unchecked) match {
         case eager: Conqueue[T] => eager
         case suspension: Function0[_] => suspension().asInstanceOf[Conqueue[T]]
@@ -97,16 +97,16 @@ object Conqueue {
     def evaluated = evaluateTail == null
     override def addIfUnevaluated[U >: T](stack: List[Conqueue.Spine[U]]) = if (!evaluated) this :: stack else stack
     def left = lwing
-    def right = new <>(tail, rwing)
-    lazy val level: Int = 1 + math.max(lwing.level, math.max(tail.level, rwing.level))
-    lazy val size: Int = lwing.size + tail.size + rwing.size
+    def right = new <>(rear, rwing)
+    lazy val level: Int = 1 + math.max(lwing.level, math.max(rear.level, rwing.level))
+    lazy val size: Int = lwing.size + rear.size + rwing.size
     override def normalized = ConcOps.normalizeLeftWingsAndTip(this, Conc.Empty) <> ConcOps.normalizeRightWings(this, Conc.Empty)
   }
 
   object Spine {
     def withSameTail[T](s: Spine[T], lwing: Num[T], rwing: Num[T]): Spine[T] = {
       var tail = s.evaluateTail
-      if (tail eq null) tail = s.tail
+      if (tail eq null) tail = s.rear
       new Spine(lwing, rwing, tail)
     }
   }
@@ -117,7 +117,7 @@ object Conqueue {
     def level = tip.level
     def size = tip.size
     def evaluated = true
-    def tail = unsupported("Undefined for the tip.")
+    def rear = unsupported("Undefined for the tip.")
     override def normalized = tip.normalized
   }
 
@@ -237,7 +237,7 @@ object ConcOps {
         val spines = "Spine(+)"
         buffer.append(" " * (indent - lefts.length) + lefts + " " + spines + " " + rights)
         buffer.append("\n")
-        traverse(rank + 1, indent, s.tail)
+        traverse(rank + 1, indent, s.rear)
       case Tip(tip) =>
         val tips = s"Tip(${showNum(tip)})"
         buffer.append(" " * (indent) + tips)
@@ -291,7 +291,7 @@ object ConcOps {
       apply(right, i - left.size)
   }
 
-  private def updatedArray[T: ClassTag](a: Array[T], i: Int, y: T, sz: Int): Array[T] = {
+  private def updatedArray[@specialized(Byte, Char, Int, Long, Float, Double) T: ClassTag](a: Array[T], i: Int, y: T, sz: Int): Array[T] = {
     val na = new Array[T](a.length)
     System.arraycopy(a, 0, na, 0, sz)
     na(i) = y
@@ -340,11 +340,18 @@ object ConcOps {
     }
   }
 
-  private def insertedArray[T: ClassTag](a: Array[T], from: Int, i: Int, y: T, sz: Int): Array[T] = {
+  private[scalablitz] def insertedArray[@specialized(Byte, Char, Int, Long, Float, Double) T: ClassTag](a: Array[T], from: Int, i: Int, y: T, sz: Int): Array[T] = {
     val na = new Array[T](sz + 1)
     System.arraycopy(a, from, na, 0, i)
     na(i) = y
     System.arraycopy(a, from + i, na, i + 1, sz - i)
+    na
+  }
+
+  private[scalablitz] def removedArray[T: ClassTag](a: Array[T], from: Int, at: Int, sz: Int): Array[T] = {
+    val na = new Array[T](sz - 1)
+    System.arraycopy(a, from, na, 0, at)
+    System.arraycopy(a, from + at + 1, na, at, sz - at - 1)
     na
   }
 
@@ -612,10 +619,10 @@ object ConcOps {
   def pay[T](work: List[Spine[T]]): List[Spine[T]] = work match {
     case head :: rest =>
       // do 2 units of work
-      val tail = head.tail
+      val tail = head.rear
       if (tail.evaluated) pay(rest)
       else {
-        val tailtail = tail.tail
+        val tailtail = tail.rear
         tailtail.addIfUnevaluated(rest)
       }
     case Nil =>
@@ -746,11 +753,11 @@ object ConcOps {
           val Three(_1, _2, _3) = s.lwing
           val nlwing = Two(c, _1)
           val carry = _2 <> _3
-          val ntail = (s.tail: @unchecked) match {
+          val ntail = (s.rear: @unchecked) match {
             case st: Spine[T] if st.lwing.index == 3 =>
-              () => pushHead(s.tail, carry, onPush)
+              () => pushHead(s.rear, carry, onPush)
             case _ =>
-              pushHead(s.tail, carry, onPush)
+              pushHead(s.rear, carry, onPush)
           }
           new Spine(nlwing, s.rwing, ntail)
         }
@@ -803,9 +810,9 @@ object ConcOps {
 
     onFix()
 
-    (s.tail: @unchecked) match {
+    (s.rear: @unchecked) match {
       case st: Spine[T] if st.lwing.index == 0 =>
-        (st.tail: @unchecked) match {
+        (st.rear: @unchecked) match {
           case stt: Spine[T] =>
             val nttlwing = noBorrowPopHead(stt.lwing)
             val nttail = Spine.withSameTail(stt, nttlwing, stt.rwing)
@@ -826,7 +833,7 @@ object ConcOps {
         if (s.lwing.index > 1) {
           Spine.withSameTail(s, noBorrowPopHead(s.lwing), s.rwing)
         } else {
-          (s.tail: @unchecked) match {
+          (s.rear: @unchecked) match {
             case st: Spine[T] => // note: s is at rank 0
               val tleftmost = st.lwing.leftmost
               val nlwing = Two(tleftmost.left, tleftmost.right)
@@ -860,7 +867,7 @@ object ConcOps {
 
   def head[T](conq: Conqueue[T]): Leaf[T] = {
     @tailrec def leftmost(c: Conc[T]): Leaf[T] = c match {
-      case Empty => unsupported("empty")
+      case Empty => invalid("Num should never have a Zero.")
       case l: Leaf[T] => l
       case _ <> _ => leftmost(c.left)
       case _ => invalid("Invalid conqueue state.")
@@ -869,6 +876,8 @@ object ConcOps {
     (conq: @unchecked) match {
       case s: Spine[T] =>
         leftmost(s.lwing.leftmost)
+      case Tip(Zero) =>
+        null
       case Tip(tip) =>
         leftmost(tip.leftmost)
       case Lazy(_, queue, _) =>
@@ -887,11 +896,11 @@ object ConcOps {
           val Three(_1, _2, _3) = s.rwing
           val nrwing = Two(_3, c)
           val carry = _1 <> _2
-          val ntail = (s.tail: @unchecked) match {
+          val ntail = (s.rear: @unchecked) match {
             case st: Spine[T] =>
-              () => pushLast(s.tail, carry, onPush)
+              () => pushLast(s.rear, carry, onPush)
             case Tip(_) =>
-              pushLast(s.tail, carry, onPush)
+              pushLast(s.rear, carry, onPush)
           }
           new Spine(s.lwing, nrwing, ntail)
         }
@@ -942,9 +951,9 @@ object ConcOps {
         new Spine(s.lwing, s.rwing, ntail)
       }
     }
-    (s.tail: @unchecked) match {
+    (s.rear: @unchecked) match {
       case st: Spine[T] if st.rwing.index == 0 =>
-        (st.tail: @unchecked) match {
+        (st.rear: @unchecked) match {
           case stt: Spine[T] =>
             val nttrwing = noBorrowPopLast(stt.rwing)
             val nttail = Spine.withSameTail(stt, stt.lwing, nttrwing)
@@ -965,7 +974,7 @@ object ConcOps {
         if (s.rwing.index > 1) {
           Spine.withSameTail(s, s.lwing, noBorrowPopLast(s.rwing))
         } else {
-          (s.tail: @unchecked) match {
+          (s.rear: @unchecked) match {
             case st: Spine[T] => // note: s is at rank 0
               val trightmost = st.rwing.rightmost
               val nrwing = Two(trightmost.left, trightmost.right)
@@ -999,7 +1008,7 @@ object ConcOps {
 
   def last[T](conq: Conqueue[T]): Leaf[T] = {
     @tailrec def rightmost(c: Conc[T]): Leaf[T] = c match {
-      case Empty => unsupported("empty")
+      case Empty => invalid("Num should never have a Zero.")
       case l: Leaf[T] => l
       case _ <> _ => rightmost(c.right)
       case _ => invalid("Invalid conqueue state: " + c.getClass.getSimpleName)
@@ -1008,6 +1017,8 @@ object ConcOps {
     (conq: @unchecked) match {
       case s: Spine[T] =>
         rightmost(s.rwing.rightmost)
+      case Tip(Zero) =>
+        null
       case Tip(tip) =>
         rightmost(tip.rightmost)
       case Lazy(_, queue, _) =>
@@ -1020,9 +1031,9 @@ object ConcOps {
       if (wrapped.level >= level) (wrapped, s)
       else {
         val nwrapped = wrapped <> s.lwing.normalized
-        (s.tail: @unchecked) match {
+        (s.rear: @unchecked) match {
           case st: Spine[T] => wrapUntil(st, nwrapped, level)
-          case Tip(tip) => (nwrapped, s.tail)
+          case Tip(tip) => (nwrapped, s.rear)
         }
       }
     }
@@ -1041,7 +1052,7 @@ object ConcOps {
       if (wrapped.level >= level) (wrapped, s)
       else {
         val nwrapped = s.rwing.normalized <> wrapped
-        (s.tail: @unchecked) match {
+        (s.rear: @unchecked) match {
           case st: Spine[T] => wrapUntil(st, nwrapped, level)
           case Tip(tip) => (nwrapped, Tip(Zero))
         }
@@ -1080,148 +1091,6 @@ object ConcOps {
   }
 
   private def unwrap[T](xs: <>[T], log: Log = noLog): Conqueue[T] = {
-    def toNum(bucket: List[Conc[T]]): Num[T] = bucket match {
-      case Nil => Zero
-      case _1 :: Nil => One(_1)
-      case _1 :: _2 :: Nil => Two(_1, _2)
-      case _1 :: _2 :: _3 :: Nil => Three(_1, _2, _3)
-      case _ => invalid("Number too large.")
-    }
-
-    def unwrapLeft(xs: Conc[T], part: Partial[T]): Partial[T] = {
-      def pack(rank: Int, bucket: List[Conc[T]], stack: List[Num[T]]): Partial[T] = {
-        def hi(c: Conc[T]) = c.level == rank - 1
-        def lo(c: Conc[T]) = c.level == rank - 2
-        def packed(bucket: List[Conc[T]]): Num[T] = (bucket: @unchecked) match {
-          case c1 :: c2 :: c3 :: c4 :: Nil =>
-            if ((hi(c3) || hi(c4)) && (hi(c1) || hi(c2))) Two(c4 <> c3, c2 <> c1)
-            else Zero
-          case c1 :: c2 :: c3 :: c4 :: c5 :: Nil =>
-            if (hi(c4) || hi(c5)) {
-              if (lo(c2) && lo(c3)) Two(c5 <> c4, (c3 <> c2) <> c1)
-              else invalid(s"This configuration should never happen: $bucket")
-            } else {
-              if (hi(c1) || hi(c2)) Two((c5 <> c4) <> c3, c2 <> c1)
-              else Zero
-            }
-          case c1 :: c2 :: c3 :: c4 :: c5 :: c6 :: Nil =>
-            if (hi(c5) || hi(c6)) invalid(s"This configuration should never happen: $bucket")
-            else if (hi(c3) || hi(c2)) invalid(s"This configuration should never happen: $bucket")
-            else Two((c6 <> c5) <> c4, (c3 <> c2) <> c1)
-          case _ =>
-            invalid(s"Cannot be called for this configuration: $bucket")
-        }
-
-        if (rank > 0) {
-          if (bucket.size < 4) Partial(rank, bucket, stack) else packed(bucket) match {
-            case Zero => Partial(rank, bucket, stack)
-            case num => Partial(rank + 1, Nil, num :: stack)
-          }
-        } else {
-          if (bucket.size == 2) Partial(1, Nil, Two(bucket(1), bucket(0)) :: Nil)
-          else Partial(0, bucket, Nil)
-        }
-      }
-
-      val shakenxs = shakeRight(xs)
-      part match {
-        case Partial(rank, bucket, stack) if xs.level >  rank + 1 =>
-          if (shakenxs.level != xs.level) unwrapLeft(shakenxs, part)
-          else {
-            val npart = unwrapLeft(shakenxs.left, part)
-            unwrapLeft(shakenxs.right, npart)
-          }
-        case Partial(rank, bucket, stack) if xs.level == rank + 1 =>
-          if (shakenxs.level != xs.level) unwrapLeft(shakenxs, part)
-          else {
-            val npart =
-              if (part.rank == shakenxs.left.level) unwrapLeft(shakenxs.left, part)
-              else pack(rank, shakenxs.left :: bucket, stack)
-            if (npart.rank <= shakenxs.right.level) unwrapLeft(shakenxs.right, npart)
-            else pack(npart.rank, shakenxs.right :: npart.bucket, npart.stack)
-          }
-        case Partial(rank, bucket, stack) if xs.level == rank =>
-          if (shakenxs.level != xs.level) pack(rank, shakenxs :: bucket, stack)
-          else if (shakenxs.level > 0) {
-            val npart = pack(rank, shakenxs.left :: bucket, stack)
-            pack(npart.rank, shakenxs.right :: npart.bucket, npart.stack)
-          } else pack(rank, shakenxs :: bucket, stack)
-        case Partial(rank, bucket, stack) if xs.level == rank - 1 =>
-          pack(rank, xs :: bucket, stack)
-        case Partial(rank, bucket, stack) if xs.level == rank - 2 =>
-          pack(rank, xs :: bucket, stack)
-        case _ =>
-          invalid(s"Unexpected unwrap case: ${xs.level} vs ${part.rank}")
-      }
-    }
-
-    def unwrapRight(xs: Conc[T], part: Partial[T]): Partial[T] = {
-      def pack(rank: Int, bucket: List[Conc[T]], stack: List[Num[T]]): Partial[T] = {
-        def hi(c: Conc[T]) = c.level == rank - 1
-        def lo(c: Conc[T]) = c.level == rank - 2
-        def packed(bucket: List[Conc[T]]): Num[T] = (bucket: @unchecked) match {
-          case c1 :: c2 :: c3 :: c4 :: Nil =>
-            if ((hi(c1) || hi(c2)) && (hi(c3) || hi(c4))) Two(c1 <> c2, c3 <> c4)
-            else Zero
-          case c1 :: c2 :: c3 :: c4 :: c5 :: Nil =>
-            if (hi(c4) || hi(c5)) {
-              if (lo(c2) && lo(c3)) Two(c1 <> (c2 <> c3), c4 <> c5)
-              else invalid(s"This configuration should never happen: $bucket")
-            } else {
-              if (hi(c1) || hi(c2)) Two(c1 <> c2, c3 <> (c4 <> c5))
-              else Zero
-            }
-          case c1 :: c2 :: c3 :: c4 :: c5 :: c6 :: Nil =>
-            if (hi(c5) || hi(c6)) invalid(s"This configuration should never happen: $bucket")
-            else if (hi(c3) || hi(c2)) invalid(s"This configuration should never happen: $bucket")
-            else Two(c1 <> (c2 <> c3), c4 <> (c5 <> c6))
-          case _ =>
-            invalid(s"Cannot be called for this configuration: $bucket")
-        }
-
-        if (rank > 0) {
-          if (bucket.size < 4) Partial(rank, bucket, stack) else packed(bucket) match {
-            case Zero => Partial(rank, bucket, stack)
-            case num => Partial(rank + 1, Nil, num :: stack)
-          }
-        } else {
-          if (bucket.size == 2) Partial(1, Nil, Two(bucket(0), bucket(1)) :: Nil)
-          else Partial(0, bucket, Nil)
-        }
-      }
-
-      val shakenxs = shakeLeft(xs)
-      part match {
-        case Partial(rank, bucket, stack) if xs.level >  rank + 1 =>
-          if (shakenxs.level != xs.level) unwrapRight(shakenxs, part)
-          else {
-            val npart = unwrapRight(shakenxs.right, part)
-            unwrapRight(shakenxs.left, npart)
-          }
-        case Partial(rank, bucket, stack) if xs.level == rank + 1 =>
-          if (shakenxs.level != xs.level) unwrapRight(shakenxs, part)
-          else {
-            val npart =
-              if (part.rank == shakenxs.right.level) unwrapRight(shakenxs.right, part)
-              else pack(rank, shakenxs.right :: bucket, stack)
-            if (npart.rank <= shakenxs.left.level) unwrapRight(shakenxs.left, npart)
-            else pack(npart.rank, shakenxs.left :: npart.bucket, npart.stack)
-          }
-        case Partial(rank, bucket, stack) if xs.level == rank =>
-          if (shakenxs.level != xs.level) pack(rank, shakenxs :: bucket, stack)
-          else if (shakenxs.level != 0) {
-            val npart = pack(rank, shakenxs.right :: bucket, stack)
-            pack(npart.rank, shakenxs.left :: npart.bucket, npart.stack)
-          } else pack(rank, shakenxs :: bucket, stack)
-        case Partial(rank, bucket, stack) if xs.level == rank - 1 =>
-          pack(rank, xs :: bucket, stack)
-        case Partial(rank, bucket, stack) if xs.level == rank - 2 =>
-          pack(rank, xs :: bucket, stack)
-        case _ =>
-          invalid(s"Unexpected unwrap case: ${xs.level} vs ${part.rank}")
-      }
-    }
-
     def zip(rank: Int, lstack: List[Num[T]], rstack: List[Num[T]]): Conqueue[T] = (lstack, rstack) match {
       case (lwing :: Nil, Nil) =>
         assert(lwing.leftmost.level == rank)
@@ -1238,31 +1107,33 @@ object ConcOps {
     }
 
     //def prepare = prepare1 _
-    def prepare(lstack: List[Num[T]], rstack: List[Num[T]], rem: List[Conc[T]]): (List[Num[T]], List[Num[T]]) = {
+    def prepare(lstack: List[Num[T]], rstack: List[Num[T]], rem: Conqueue[Conc[T]]): (List[Num[T]], List[Num[T]]) = {
       //def prepare = prepare1 _
       //assert(lstack.map(_.leftmost.level).reverse == (0 until lstack.length), lstack.map(_.leftmost.level))
       //assert(rstack.map(_.leftmost.level).reverse == (0 until rstack.length), rstack.map(_.leftmost.level))
       if (rem.isEmpty) (lstack.reverse, rstack.reverse)
       else if (lstack.length < rstack.length) {
+        val remhead = rem.head
         if (
-          (lstack.nonEmpty && lstack.head.rightmost.level < rem.head.level) ||
-          (lstack.isEmpty && rem.head.level > 0)
+          (lstack.nonEmpty && lstack.head.rightmost.level < remhead.level) ||
+          (lstack.isEmpty && remhead.level > 0)
         ) {
-          prepare(lstack, rstack, rem.head.left :: rem.head.right :: rem.tail)
+          val nrem = remhead.left +: remhead.right +: rem.tail
+          prepare(lstack, rstack, nrem)
         } else (lstack: @unchecked) match {
           case Three(_1, _2, _3) :: ltail =>
-            val added = _3 <> rem.head
+            val added = _3 <> remhead
             if (added.level == _3.level) prepare(Three(_1, _2, added) :: ltail, rstack, rem.tail)
             else prepare(One(added) :: Two(_1, _2) :: ltail, rstack, rem.tail)
           case Two(_1, _2) :: ltail =>
-            val added = _2 <> rem.head
+            val added = _2 <> remhead
             if (added.level == _2.level) prepare(Two(_1, added) :: ltail, rstack, rem.tail)
             else prepare(One(added) :: One(_1) :: ltail, rstack, rem.tail)
           case One(_1) :: Nil =>
-            val added = _1 <> rem.head
+            val added = _1 <> remhead
             prepare(Two(added.left, added.right) :: Nil, rstack, rem.tail)
           case One(_1) :: num :: ltail =>
-            val added = _1 <> rem.head
+            val added = _1 <> remhead
             val shaken = if (added.level == _1.level) added else shakeRight(added)
             if (shaken.level == _1.level) prepare(One(shaken) :: num :: ltail, rstack, rem.tail)
             else if (shaken.left.level == shaken.right.level) prepare(Two(shaken.left, shaken.right) :: num :: ltail, rstack, rem.tail)
@@ -1271,7 +1142,7 @@ object ConcOps {
               case num => prepare(One(shaken.right) :: noCarryPushLast(num, shaken.left) :: ltail, rstack, rem.tail)
             }
           case Nil =>
-            prepare(One(rem.head) :: Nil, rstack, rem.tail)
+            prepare(One(remhead) :: Nil, rstack, rem.tail)
         }
       } else {
         val remlast = rem.last
@@ -1279,21 +1150,22 @@ object ConcOps {
           (rstack.nonEmpty && rstack.head.leftmost.level < remlast.level) ||
           (rstack.isEmpty && remlast.level > 0)
         ) {
-          prepare(lstack, rstack, rem.init ::: (remlast.left :: remlast.right :: Nil))
+          val nrem = rem.init :+ remlast.left :+ remlast.right
+          prepare(lstack, rstack, nrem)
         } else (rstack: @unchecked) match {
           case Three(_1, _2, _3) :: rtail =>
-            val added = rem.last <> _1
+            val added = remlast <> _1
             if (added.level == _1.level) prepare(lstack, Three(added, _2, _3) :: rtail, rem.init)
             else prepare(lstack, One(added) :: Two(_2, _3) :: rtail, rem.init)
           case Two(_1, _2) :: rtail =>
-            val added = rem.last <> _1
+            val added = remlast <> _1
             if (added.level == _1.level) prepare(lstack, Two(added, _2) :: rtail, rem.init)
             else prepare(lstack, One(added) :: One(_2) :: rtail, rem.init)
           case One(_1) :: Nil =>
-            val added = rem.last <> _1
+            val added = remlast <> _1
             prepare(lstack, Two(added.left, added.right) :: Nil, rem.init)
           case One(_1) :: num :: ltail =>
-            val added = rem.last <> _1
+            val added = remlast <> _1
             val shaken = if (added.level == _1.level) added else shakeLeft(added)
             if (shaken.level == _1.level) prepare(lstack, One(shaken) :: num :: ltail, rem.init)
             else if (shaken.left.level == shaken.right.level) prepare(lstack, Two(shaken.left, shaken.right) :: num :: ltail, rem.init)
@@ -1302,35 +1174,19 @@ object ConcOps {
               case num => prepare(lstack, One(shaken.left) :: noCarryPushHead(num, shaken.right) :: ltail, rem.init)
             }
           case Nil =>
-            prepare(lstack, One(rem.last) :: Nil, rem.init)
+            prepare(lstack, One(remlast) :: Nil, rem.init)
         }
       }
     }
 
-    @tailrec def balance(lpart: Partial[T], rpart: Partial[T]): Conqueue[T] = {
-      val llen = lpart.stack.length
-      val rlen = rpart.stack.length
-      if (llen - rlen > 1) {
-        val (nlpart, nrpart) = lpart.bucket match {
-          case Nil => (lpart.lborrow(), unwrapRight(lpart.stack.head.rightmost, rpart))
-          case x :: xs => (lpart.copy(bucket = xs), unwrapRight(x, rpart))
-        }
-        balance(nlpart, nrpart)
-      } else if (rlen - llen > 1) {
-        val (nlpart, nrpart) = rpart.bucket match {
-          case Nil => (unwrapLeft(rpart.stack.head.leftmost, lpart), rpart.rborrow())
-          case x :: xs => (unwrapLeft(x, lpart), rpart.copy(bucket = xs))
-        }
-        balance(nlpart, nrpart)
-      } else {
-        val lrem = lpart.bucket.reverse
-        val rrem = rpart.bucket
-        val (lwings, rwings) = prepare(lpart.stack, rpart.stack, lrem ::: rrem)
-        zip(0, lwings, rwings)
-      }
-    }
+    val (lwings, rwings) = prepare(Nil, Nil, Tip(One(new Single(xs))))
+    zip(0, lwings, rwings)
+  }
 
-    balance(unwrapLeft(xs.left, Partial(0, Nil, Nil)), unwrapRight(xs.right, Partial(0, Nil, Nil)))
+  def isEmptyConqueue[T](conqueue: Conqueue[T]): Boolean = conqueue match {
+    case Lazy(_, Tip(Zero), _) => true
+    case Tip(Zero) => true
+    case _ => false
   }
 
   trait Log {
@@ -1372,11 +1228,7 @@ class ConqueueBuffer[@specialized(Byte, Char, Int, Long, Float, Double) T: Class
 
   def size = conqueue.size
 
-  def isEmpty = conqueue match {
-    case Lazy(_, Tip(Zero), _) => true
-    case Tip(Zero) => true
-    case _ => false
-  }
+  def isEmpty = ConcOps.isEmptyConqueue(conqueue)
 
   def nonEmpty = !isEmpty
 

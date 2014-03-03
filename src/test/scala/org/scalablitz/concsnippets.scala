@@ -49,13 +49,13 @@ trait ConcSnippets {
       if (s.lwing == Zero || s.rwing == Zero) {
         assert(false, "Evaluated Spine cannot contain Zero.")
       }
-      checkConqueueInvs(s.lwing, level) && checkConqueueInvs(s.rwing, level) && checkConqueueInvs(s.tail, level + 1)
+      checkConqueueInvs(s.lwing, level) && checkConqueueInvs(s.rwing, level) && checkConqueueInvs(s.rear, level + 1)
     case Tip(tip) =>
       checkConqueueInvs(tip, level)
     case Zero =>
       true
     case One(_1) =>
-      assert(_1.level == level)
+      assert(_1.level == level, s"levels: ${_1.level} vs $level")
       checkInvs(_1)
     case Two(_1, _2) =>
       assert(_1.level == level)
@@ -129,7 +129,7 @@ trait ConcSnippets {
 
   def testAppendCorrectness(size: Int, appends: Int) = {
     var xs = concList(0 until size)
-    for (i <- 0 until appends) xs = xs :+ i
+    for (i <- 0 until appends) xs = xs rappend i
 
     val same = toSeq(xs) == ((0 until size) ++ (0 until appends))
     val sameNorm = toSeq(xs.normalized) == ((0 until size) ++ (0 until appends))
@@ -138,7 +138,7 @@ trait ConcSnippets {
 
   def testAppendBalance(size: Int, appends: Int) = {
     var xs = concList(0 until size)
-    for (i <- 0 until appends) xs = xs :+ i
+    for (i <- 0 until appends) xs = xs rappend i
 
     checkInvs(xs) && checkInvs(xs.normalized)
   }

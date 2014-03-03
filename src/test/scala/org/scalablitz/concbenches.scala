@@ -67,7 +67,7 @@ class ConcBenches extends PerformanceTest.OfflineReport {
       var xs: Conc[String] = Empty
       var i = 0
       while (i < sz) {
-        xs = xs :+ ""
+        xs = xs rappend ""
         i += 1
       }
       xs
