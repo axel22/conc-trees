@@ -1106,10 +1106,10 @@ object ConcOps {
         new Spine(lwing, rwing, zip(rank + 1, ltail, rtail))
     }
 
-    //def prepare = prepare1 _
+    //def unwrap = unwrap1 _
     @tailrec
-    def prepare(lstack: List[Num[T]], rstack: List[Num[T]], rem: Conqueue[Conc[T]]): (List[Num[T]], List[Num[T]]) = {
-      //def prepare = prepare1 _
+    def unwrap(lstack: List[Num[T]], rstack: List[Num[T]], rem: Conqueue[Conc[T]]): (List[Num[T]], List[Num[T]]) = {
+      //def unwrap = unwrap1 _
       //assert(lstack.map(_.leftmost.level).reverse == (0 until lstack.length), lstack.map(_.leftmost.level))
       //assert(rstack.map(_.leftmost.level).reverse == (0 until rstack.length), rstack.map(_.leftmost.level))
       if (rem.isEmpty) (lstack.reverse, rstack.reverse)
@@ -1120,30 +1120,30 @@ object ConcOps {
           (lstack.isEmpty && remhead.level > 0)
         ) {
           val nrem = remhead.left +: remhead.right +: rem.tail
-          prepare(lstack, rstack, nrem)
+          unwrap(lstack, rstack, nrem)
         } else (lstack: @unchecked) match {
           case Three(_1, _2, _3) :: ltail =>
             val added = _3 <> remhead
-            if (added.level == _3.level) prepare(Three(_1, _2, added) :: ltail, rstack, rem.tail)
-            else prepare(One(added) :: Two(_1, _2) :: ltail, rstack, rem.tail)
+            if (added.level == _3.level) unwrap(Three(_1, _2, added) :: ltail, rstack, rem.tail)
+            else unwrap(One(added) :: Two(_1, _2) :: ltail, rstack, rem.tail)
           case Two(_1, _2) :: ltail =>
             val added = _2 <> remhead
-            if (added.level == _2.level) prepare(Two(_1, added) :: ltail, rstack, rem.tail)
-            else prepare(One(added) :: One(_1) :: ltail, rstack, rem.tail)
+            if (added.level == _2.level) unwrap(Two(_1, added) :: ltail, rstack, rem.tail)
+            else unwrap(One(added) :: One(_1) :: ltail, rstack, rem.tail)
           case One(_1) :: Nil =>
             val added = _1 <> remhead
-            prepare(Two(added.left, added.right) :: Nil, rstack, rem.tail)
+            unwrap(Two(added.left, added.right) :: Nil, rstack, rem.tail)
           case One(_1) :: num :: ltail =>
             val added = _1 <> remhead
             val shaken = if (added.level == _1.level) added else shakeRight(added)
-            if (shaken.level == _1.level) prepare(One(shaken) :: num :: ltail, rstack, rem.tail)
-            else if (shaken.left.level == shaken.right.level) prepare(Two(shaken.left, shaken.right) :: num :: ltail, rstack, rem.tail)
+            if (shaken.level == _1.level) unwrap(One(shaken) :: num :: ltail, rstack, rem.tail)
+            else if (shaken.left.level == shaken.right.level) unwrap(Two(shaken.left, shaken.right) :: num :: ltail, rstack, rem.tail)
             else num match {
-              case Three(n1, n2, n3) => prepare(Two(n3 <> shaken.left, shaken.right) :: Two(n1, n2) :: ltail, rstack, rem.tail)
-              case num => prepare(One(shaken.right) :: noCarryPushLast(num, shaken.left) :: ltail, rstack, rem.tail)
+              case Three(n1, n2, n3) => unwrap(Two(n3 <> shaken.left, shaken.right) :: Two(n1, n2) :: ltail, rstack, rem.tail)
+              case num => unwrap(One(shaken.right) :: noCarryPushLast(num, shaken.left) :: ltail, rstack, rem.tail)
             }
           case Nil =>
-            prepare(One(remhead) :: Nil, rstack, rem.tail)
+            unwrap(One(remhead) :: Nil, rstack, rem.tail)
         }
       } else {
         val remlast = rem.last
@@ -1152,35 +1152,35 @@ object ConcOps {
           (rstack.isEmpty && remlast.level > 0)
         ) {
           val nrem = rem.init :+ remlast.left :+ remlast.right
-          prepare(lstack, rstack, nrem)
+          unwrap(lstack, rstack, nrem)
         } else (rstack: @unchecked) match {
           case Three(_1, _2, _3) :: rtail =>
             val added = remlast <> _1
-            if (added.level == _1.level) prepare(lstack, Three(added, _2, _3) :: rtail, rem.init)
-            else prepare(lstack, One(added) :: Two(_2, _3) :: rtail, rem.init)
+            if (added.level == _1.level) unwrap(lstack, Three(added, _2, _3) :: rtail, rem.init)
+            else unwrap(lstack, One(added) :: Two(_2, _3) :: rtail, rem.init)
           case Two(_1, _2) :: rtail =>
             val added = remlast <> _1
-            if (added.level == _1.level) prepare(lstack, Two(added, _2) :: rtail, rem.init)
-            else prepare(lstack, One(added) :: One(_2) :: rtail, rem.init)
+            if (added.level == _1.level) unwrap(lstack, Two(added, _2) :: rtail, rem.init)
+            else unwrap(lstack, One(added) :: One(_2) :: rtail, rem.init)
           case One(_1) :: Nil =>
             val added = remlast <> _1
-            prepare(lstack, Two(added.left, added.right) :: Nil, rem.init)
+            unwrap(lstack, Two(added.left, added.right) :: Nil, rem.init)
           case One(_1) :: num :: ltail =>
             val added = remlast <> _1
             val shaken = if (added.level == _1.level) added else shakeLeft(added)
-            if (shaken.level == _1.level) prepare(lstack, One(shaken) :: num :: ltail, rem.init)
-            else if (shaken.left.level == shaken.right.level) prepare(lstack, Two(shaken.left, shaken.right) :: num :: ltail, rem.init)
+            if (shaken.level == _1.level) unwrap(lstack, One(shaken) :: num :: ltail, rem.init)
+            else if (shaken.left.level == shaken.right.level) unwrap(lstack, Two(shaken.left, shaken.right) :: num :: ltail, rem.init)
             else num match {
-              case Three(n1, n2, n3) => prepare(lstack, Two(shaken.left, shaken.right <> n1) :: Two(n2, n3) :: ltail, rem.init)
-              case num => prepare(lstack, One(shaken.left) :: noCarryPushHead(num, shaken.right) :: ltail, rem.init)
+              case Three(n1, n2, n3) => unwrap(lstack, Two(shaken.left, shaken.right <> n1) :: Two(n2, n3) :: ltail, rem.init)
+              case num => unwrap(lstack, One(shaken.left) :: noCarryPushHead(num, shaken.right) :: ltail, rem.init)
             }
           case Nil =>
-            prepare(lstack, One(remlast) :: Nil, rem.init)
+            unwrap(lstack, One(remlast) :: Nil, rem.init)
         }
       }
     }
 
-    val (lwings, rwings) = prepare(Nil, Nil, Tip(One(new Single(xs))))
+    val (lwings, rwings) = unwrap(Nil, Nil, Tip(One(new Single(xs))))
     zip(0, lwings, rwings)
   }
 
