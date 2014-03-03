@@ -58,15 +58,15 @@ class ConqueueBuffer[@specialized(Byte, Char, Int, Long, Float, Double) T: Class
       val rightMid = (rightStart + rightIndex + 1) / 2
       val n = rightMid - rightStart
       leftEnsureSize(n)
-      System.arraycopy(rightChunk, rightStart, leftChunk, leftChunk.size - n, n)
+      System.arraycopy(rightChunk, rightStart, leftChunk, leftChunk.length - n, n)
       rightStart = rightMid
-      leftStart = leftChunk.size - 1
-      leftIndex = leftChunk.size - n - 1
+      leftStart = leftChunk.length - 1
+      leftIndex = leftChunk.length - n - 1
     } else unsupported("empty")
   }
 
   def head: T = {
-    if (leftIndex < leftStart) leftChunk(leftIndex)
+    if (leftIndex < leftStart) leftChunk(leftIndex + 1)
     else {
       pullLeft()
       head
@@ -81,7 +81,7 @@ class ConqueueBuffer[@specialized(Byte, Char, Int, Long, Float, Double) T: Class
         case last: Chunk[T] =>
           rightChunk = last.array
           rightStart = 0
-          rightIndex = rightChunk.size
+          rightIndex = last.size
         case last: Single[T] =>
           rightChunk = new Array[T](k)
           rightChunk(0) = last.x
@@ -89,18 +89,18 @@ class ConqueueBuffer[@specialized(Byte, Char, Int, Long, Float, Double) T: Class
           rightIndex = 1
       }
     } else if (leftIndex < leftStart) {
-      val leftMid = (leftIndex + leftStart) / 2
-      val n = leftStart - leftMid
+      val leftMid = (leftIndex + 1 + leftStart) / 2
+      val n = leftStart - leftMid + 1
       rightEnsureSize(n)
       System.arraycopy(leftChunk, leftMid, rightChunk, 0, n)
-      leftStart = leftMid
+      leftStart = leftMid - 1
       rightStart = 0
       rightIndex = n
     } else unsupported("empty")
   }
 
   def last: T = {
-    if (rightIndex > rightStart) rightChunk(rightIndex)
+    if (rightIndex > rightStart) rightChunk(rightIndex - 1)
     else {
       pullRight()
       last
@@ -146,6 +146,8 @@ class ConqueueBuffer[@specialized(Byte, Char, Int, Long, Float, Double) T: Class
     this
   }
 
+  def +=:(elem: T): this.type = pushHead(elem)
+
   def popHead(): T = {
     if (leftIndex < leftStart) {
       leftIndex += 1
@@ -165,6 +167,8 @@ class ConqueueBuffer[@specialized(Byte, Char, Int, Long, Float, Double) T: Class
     this
   }
 
+  def +=(elem: T): this.type = pushLast(elem)
+
   def popLast(): T = {
     if (rightIndex > rightStart) {
       rightIndex -= 1
@@ -183,6 +187,23 @@ class ConqueueBuffer[@specialized(Byte, Char, Int, Long, Float, Double) T: Class
     var result = conqueue
     conqueue = if (isLazy) Lazy(Nil, Conqueue.empty, Nil) else Conqueue.empty
     result
+  }
+
+  override def toString = {
+    val buffer = collection.mutable.Buffer[T]()
+    for (i <- (leftIndex + 1) to leftStart) buffer += leftChunk(i)
+    for (x <- conqueue) buffer += x
+    for (i <- rightStart until rightIndex) buffer += rightChunk(i)
+    buffer.mkString("ConqueueBuffer(", ", ", ")")
+  }
+
+  private[scalablitz] def diagnosticString = {
+    println(s"-----------")
+    println(s"leftIndex/leftStart: $leftIndex/$leftStart")
+    println(s"leftChunk:  ${leftChunk.mkString(", ")}")
+    println(s"rightStart/rightIndex: $rightStart/$rightIndex")
+    println(s"rightChunk: ${rightChunk.mkString(", ")}")
+    println(s"mid: ${ConcOps.toSeq(conqueue).mkString(", ")}")
   }
 
 }

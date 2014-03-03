@@ -483,6 +483,62 @@ object ConcChecks extends Properties("Conc") with ConcSnippets {
     }
   }
 
+  property("conqueue buffer all combinations of operations correct") = forAll(choose(1, 64), choose(1, 64), choose(1, 10000), choose(1, 1000000)) { (prehead, prelast, numops, seed) =>
+    //forAll(oneOf(0, 0), oneOf(0, 0), oneOf(2659, 2659), oneOf(0, 0)) { (prehead, prelast, numops, seed) =>
+    //forAll(oneOf(0, 0), oneOf(0, 0), oneOf(1770, 1770), oneOf(0, 0)) { (prehead, prelast, numops, seed) =>
+    noExceptions(s"$prehead, $prelast, $numops, $seed") {
+      val cb = new ConqueueBuffer[Int](32)
+      var v = Vector[Int]()
+      val random = new scala.util.Random(seed)
+      for (i <- 0 until prehead) {
+        val j = 100 - i
+        cb.pushHead(j)
+        v = j +: v
+      }
+      for (i <- 0 until prelast) {
+        val j = 100 - i
+        cb.pushLast(j)
+        v = v :+ j
+      }
+      val opHistory = mutable.Buffer[Int]()
+      for (j <- 0 until numops) {
+        val i = -j - 1
+        val ops = if (cb.isEmpty) 2 else 4
+        val op = random.nextInt(ops)
+        opHistory += op
+        op match {
+          case 0 =>
+            cb.pushHead(i)
+            v = i +: v
+          case 1 =>
+            cb.pushLast(i)
+            v = v :+ i
+          case 2 =>
+            cb.popHead()
+            v = v.tail
+          case 3 =>
+            cb.popLast()
+            v = v.init
+        }
+        val bothEmpty = (cb.isEmpty && v.isEmpty)
+        val condition = if (bothEmpty) s"both empty" else s"both non-empty"
+        if (!(bothEmpty || (cb.head == v.head && cb.last == v.last))) {
+          println(cb.diagnosticString)
+          println(s"op: $op")
+          println(v)
+          println(condition)
+          println("assertion!")
+          assert(false, s"op: $op, i: $i\n$cb\n$v\noperation history: $opHistory\ncondition: $condition")
+        }
+      }
+      val conq = cb.extractConqueue()
+      val seq = toSeq(conq)
+      all(
+        s"Represents the same sequence:\n${v.mkString(", ")}\n---- vs ----\n${seq.mkString(", ")}" |: v == seq
+      )
+    }
+  }
+
 }
 
 

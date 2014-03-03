@@ -190,7 +190,7 @@ object ConcOps {
   import ConcRope._
   import Conqueue._
 
-  private def toSeq[T](xs: Conc[T]): Seq[T] = {
+  private[scalablitz] def toSeq[T](xs: Conc[T]): Seq[T] = {
     val buffer = collection.mutable.Buffer[T]()
     for (x <- xs) {
       buffer += x
