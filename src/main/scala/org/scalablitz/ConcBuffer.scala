@@ -7,6 +7,8 @@ import scala.reflect.ClassTag
 
 
 class ConcBuffer[@specialized(Byte, Char, Int, Long, Float, Double) T: ClassTag](val k: Int) {
+  require(k > 0)
+
   private var conc: Conc[T] = Conc.Empty
   private var chunk: Array[T] = new Array(k)
   private var lastSize: Int = 0

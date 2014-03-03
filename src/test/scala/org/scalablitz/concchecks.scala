@@ -428,6 +428,61 @@ object ConcChecks extends Properties("Conc") with ConcSnippets {
     }
   }
 
+  property("conc buffer correct") = forAll(choose(1, 10000)) { num =>
+    val cb = new ConcBuffer[Int](32)
+    for (i <- 0 until num) cb += i
+    val conc = cb.extractConc()
+    s"Conc buffer contains correct elements:\n$conc\n${toSeq(conc)}\n---- vs ----\n${0 until num}" |: toSeq(conc) == (0 until num)
+  }
+
+  def noExceptions(msg: String = "")(body: =>Prop) = {
+    try {
+      body
+    } catch {
+      case t: Throwable =>
+        s"$msg\n" +
+        s"Should not cause exceptions: $t\n${t.getStackTrace.mkString("\n")}" |: false
+    }
+  }
+
+  property("conqueue buffer correct pushLast") = forAll(choose(1, 10000)) { num =>
+    noExceptions(s"num = $num") {
+      val cb = new ConqueueBuffer[Int](32)
+      for (i <- 0 until num) cb.pushLast(i)
+      val conq = cb.extractConqueue()
+      s"Conqueue buffer contains correct elements:\n$conq\n${toSeq(conq)}\n---- vs ----\n${0 until num}}" |: toSeq(conq) == (0 until num)
+    }
+  }
+
+  property("conqueue buffer correct pushHead") = forAll(choose(1, 10000)) { num =>
+    noExceptions(s"num = $num") {
+      val cb = new ConqueueBuffer[Int](32)
+      for (i <- 0 until num) cb.pushHead(i)
+      val conq = cb.extractConqueue()
+      s"Conqueue buffer contains correct elements:\n$conq\n${toSeq(conq)}\n---- vs ----\n${(0 until num).reverse}}" |: toSeq(conq) == (0 until num).reverse
+    }
+  }
+
+  property("conqueue buffer correct popLast") = forAll(choose(1, 10000)) { num =>
+    noExceptions(s"num = $num") {
+      val cb = new ConqueueBuffer[Int](32)
+      for (i <- 0 until num) cb.pushLast(i)
+      val buffer = mutable.Buffer[Int]()
+      while (cb.nonEmpty) buffer += cb.popLast()
+      s"Conqueue buffer pops correct elements:\nbuffer\n---- vs ----\n${(0 until num).reverse}}" |: buffer == (0 until num).reverse
+    }
+  }
+
+  property("conqueue buffer correct popHead") = forAll(choose(1, 10000)) { num =>
+    noExceptions(s"num = $num") {
+      val cb = new ConqueueBuffer[Int](32)
+      for (i <- 0 until num) cb.pushLast(i)
+      val buffer = mutable.Buffer[Int]()
+      while (cb.nonEmpty) buffer += cb.popHead()
+      s"Conqueue buffer pops correct elements:\nbuffer\n---- vs ----\n${(0 until num)}}" |: buffer == (0 until num)
+    }
+  }
+
 }
 
 

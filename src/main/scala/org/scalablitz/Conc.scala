@@ -44,7 +44,7 @@ object Conc {
   
   class Chunk[@specialized(Byte, Char, Int, Long, Float, Double) T](val array: Array[T], val size: Int, val k: Int) extends Leaf[T] {
     def level = 0
-    override def toString = s"Chunk(${array.take(5).mkString(", ")}, size, k)"
+    override def toString = s"Chunk(${array.mkString("", ", ", "")}; $size; $k)"
   }
 
 }
@@ -272,6 +272,8 @@ object ConcOps {
       foreach(right, f)
     case Zero =>
     case Tip(Zero) =>
+    case Lazy(_, conq, _) =>
+      foreach(conq, f)
     case conc: Conc[T] =>
       // TODO make more efficient
       foreach(conc.left, f)
@@ -355,7 +357,7 @@ object ConcOps {
     na
   }
 
-  private def copiedArray[T: ClassTag](a: Array[T], from: Int, sz: Int): Array[T] = {
+  private[scalablitz] def copiedArray[T: ClassTag](a: Array[T], from: Int, sz: Int): Array[T] = {
     val na = new Array[T](sz)
     System.arraycopy(a, from, na, 0, sz)
     na

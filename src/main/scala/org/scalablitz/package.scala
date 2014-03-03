@@ -103,6 +103,7 @@ package object scalablitz {
         Tip(One(new Single(y)))
     }
     def isEmpty = ConcOps.isEmptyConqueue(self)
+    def nonEmpty = !isEmpty
   }
 
 }
