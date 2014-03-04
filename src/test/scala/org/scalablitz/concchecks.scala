@@ -428,13 +428,6 @@ object ConcChecks extends Properties("Conc") with ConcSnippets {
     }
   }
 
-  property("conc buffer correct") = forAll(choose(1, 10000)) { num =>
-    val cb = new ConcBuffer[Int](32)
-    for (i <- 0 until num) cb += i
-    val conc = cb.extractConc()
-    s"Conc buffer contains correct elements:\n$conc\n${toSeq(conc)}\n---- vs ----\n${0 until num}" |: toSeq(conc) == (0 until num)
-  }
-
   def noExceptions(msg: String = "")(body: =>Prop) = {
     try {
       body
@@ -443,6 +436,29 @@ object ConcChecks extends Properties("Conc") with ConcSnippets {
         s"$msg\n" +
         s"Should not cause exceptions: $t\n${t.getStackTrace.mkString("\n")}" |: false
     }
+  }
+
+  property("conqueue concat") = forAll(lazyQueues(12), lazyQueues(12)) { (c1, c2) =>
+    val s1 = toSeq(c1)
+    val s2 = toSeq(c2)
+    val appended = s1 ++ s2
+    val concatenated = c1 <|> c2
+    val labelString = {
+      s"${ConcOps.queueString(c1)}\n---- concat with ----\n${ConcOps.queueString(c2)}\n$s1\n---- ++ ----\n$s2\n==========\n${toSeq(concatenated)}\n---- vs ----\n$appended\n" +
+      s"\n------\n" +
+      s"c1.normalized = ${toSeq(c1.normalized)}\n" +
+      s"c2.normalized = ${toSeq(c2.normalized)}\n"
+    }
+    noExceptions(labelString) {
+      ("Represent same sequence:\n" + labelString) |: appended == toSeq(concatenated)
+    }
+  }
+
+  property("conc buffer correct") = forAll(choose(1, 10000)) { num =>
+    val cb = new ConcBuffer[Int](32)
+    for (i <- 0 until num) cb += i
+    val conc = cb.extractConc()
+    s"Conc buffer contains correct elements:\n$conc\n${toSeq(conc)}\n---- vs ----\n${0 until num}" |: toSeq(conc) == (0 until num)
   }
 
   property("conqueue buffer correct pushLast") = forAll(choose(1, 10000)) { num =>

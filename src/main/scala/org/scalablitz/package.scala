@@ -18,7 +18,7 @@ package object scalablitz {
       ConcOps.apply(self, i)
     }
     def foreach[U](f: T => U) = ConcOps.foreach(self, f)
-    def <>(that: Conc[T]) = ConcOps.concatTop(self, that)
+    def <>(that: Conc[T]) = ConcOps.concatTop(self.normalized, that.normalized)
   }
 
   implicit class ConcModificationApi[@specialized(Byte, Char, Int, Long, Float, Double) T: ClassTag](val self: Conc[T]) {
@@ -104,6 +104,7 @@ package object scalablitz {
     }
     def isEmpty = ConcOps.isEmptyConqueue(self)
     def nonEmpty = !isEmpty
+    def <|>(that: Conqueue[T]) = ConcOps.concatConqueueTop(self, that)
   }
 
 }

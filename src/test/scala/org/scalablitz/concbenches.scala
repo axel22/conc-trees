@@ -30,6 +30,14 @@ class ConcBenches extends PerformanceTest.OfflineReport {
     xs.extractConc()
   }
 
+  def conqueues(k: Int, from: Int, until: Int) = for {
+    size <- sizes(from, until)
+  } yield {
+    val xs = new ConqueueBuffer[Int](k)
+    for (x <- 0 until size) xs += x
+    xs.extractConqueue()
+  }
+
   def lists(from: Int, until: Int) = for {
     size <- sizes(from, until)
   } yield (0 until size).toList
@@ -103,6 +111,26 @@ class ConcBenches extends PerformanceTest.OfflineReport {
       xs
     }
 
+    using(sizes(300000, 1500000)) curve("ConqueueBuffer(128)") in { sz =>
+      val xs = new ConqueueBuffer[Int](128)
+      var i = 0
+      while (i < sz) {
+        xs += i
+        i += 1
+      }
+      xs
+    }
+
+    using(sizes(300000, 1500000)) curve("ArrayBuffer") in { sz =>
+      val xs = new collection.mutable.ArrayBuffer[String]()
+      var i = 0
+      while (i < sz) {
+        xs += ""
+        i += 1
+      }
+      xs
+    }
+
     using(sizes(300000, 1500000)) curve("VectorBuilder") in { sz =>
       val xs = new collection.immutable.VectorBuilder[String]()
       var i = 0
@@ -124,10 +152,18 @@ class ConcBenches extends PerformanceTest.OfflineReport {
       }
     }
 
-    using(ropes(128, 300000, 1500000) zip concs(3000, 300000).rename("size" -> "thatSize")) curve("Conc.Buffer(128)") in { case (rope, thatRope) =>
+    using(ropes(128, 300000, 1500000) zip ropes(128, 3000, 300000).rename("size" -> "thatSize")) curve("Conc.Buffer(128)") in { case (rope, thatRope) =>
       var i = 0
       while (i < 10000) {
         rope <> thatRope
+        i += 1
+      }
+    }
+
+    using(conqueues(128, 300000, 1500000) zip conqueues(128, 3000, 300000).rename("size" -> "thatSize")) curve("Conqueue.Buffer(128)") in { case (conq, thatConq) =>
+      var i = 0
+      while (i < 10000) {
+        conq <> thatConq
         i += 1
       }
     }

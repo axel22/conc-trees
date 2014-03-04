@@ -138,7 +138,7 @@ object Conqueue {
     override def normalized = Conc.Empty
   }
 
-  case class One[T](_1: Conc[T]) extends Num[T] {
+  case class One[+T](_1: Conc[T]) extends Num[T] {
     def left = _1
     def right = Conc.Empty
     def leftmost = _1
@@ -149,7 +149,7 @@ object Conqueue {
     override def normalized = _1
   }
 
-  case class Two[T](_1: Conc[T], _2: Conc[T]) extends Num[T] {
+  case class Two[+T](_1: Conc[T], _2: Conc[T]) extends Num[T] {
     def left = _1
     def right = _2
     def leftmost = _1
@@ -160,7 +160,7 @@ object Conqueue {
     override def normalized = _1 <> _2
   }
 
-  case class Three[T](_1: Conc[T], _2: Conc[T], _3: Conc[T]) extends Num[T] {
+  case class Three[+T](_1: Conc[T], _2: Conc[T], _3: Conc[T]) extends Num[T] {
     def left = _1
     def right = new <>(_2, _3)
     def leftmost = _1
@@ -171,7 +171,7 @@ object Conqueue {
     override def normalized = _1 <> _2 <> _3
   }
 
-  case class Four[T](_1: Conc[T], _2: Conc[T], _3: Conc[T], _4: Conc[T]) extends Num[T] {
+  case class Four[+T](_1: Conc[T], _2: Conc[T], _3: Conc[T], _4: Conc[T]) extends Num[T] {
     def left = new <>(_1, _2)
     def right = new <>(_3, _4)
     def leftmost = _1
@@ -241,6 +241,10 @@ object ConcOps {
       case Tip(tip) =>
         val tips = s"Tip(${showNum(tip)})"
         buffer.append(" " * (indent) + tips)
+      case Lazy(_, conq, _) =>
+        buffer.append(" " * (indent) + "Lazy(+)")
+        buffer.append("\n")
+        traverse(rank, indent, conq)
     }
 
     traverse(0, spacing, conq)
@@ -271,13 +275,92 @@ object ConcOps {
       foreach(left, f)
       foreach(right, f)
     case Zero =>
+    case One(_1) =>
+      foreach(_1, f)
+    case Two(_1, _2) =>
+      foreach(_1, f)
+      foreach(_2, f)
+    case Three(_1, _2, _3) =>
+      foreach(_1, f)
+      foreach(_2, f)
+      foreach(_3, f) 
     case Tip(Zero) =>
+    case Tip(num) =>
+      foreach(num, f)
     case Lazy(_, conq, _) =>
       foreach(conq, f)
-    case conc: Conc[T] =>
-      // TODO make more efficient
-      foreach(conc.left, f)
-      foreach(conc.right, f)
+    case st: Spine[T] =>
+      foreach(st.lwing, f)
+      foreach(st.rear, f)
+      foreach(st.rwing, f)
+    case _ =>
+      invalid("All cases should have been covered: " + xs + ", " + xs.getClass)
+  }
+
+  def foreachLeafLeft[T](xs: Conc[T])(f: Leaf[T] => Unit): Unit = (xs: @unchecked) match {
+    case left <> right =>
+      foreachLeafLeft(left)(f)
+      foreachLeafLeft(right)(f)
+    case Empty =>
+    case leaf: Leaf[T] =>
+      f(leaf)
+    case Append(left, right) =>
+      foreachLeafLeft(left)(f)
+      foreachLeafLeft(right)(f)
+    case Zero =>
+    case One(_1) =>
+      foreachLeafLeft(_1)(f)
+    case Two(_1, _2) =>
+      foreachLeafLeft(_1)(f)
+      foreachLeafLeft(_2)(f)
+    case Three(_1, _2, _3) =>
+      foreachLeafLeft(_1)(f)
+      foreachLeafLeft(_2)(f)
+      foreachLeafLeft(_3)(f) 
+    case Tip(Zero) =>
+    case Tip(num) =>
+      foreachLeafLeft(num)(f)
+    case Lazy(_, conq, _) =>
+      foreachLeafLeft(conq)(f)
+    case st: Spine[T] =>
+      foreachLeafLeft(st.lwing)(f)
+      foreachLeafLeft(st.rear)(f)
+      foreachLeafLeft(st.rwing)(f)
+    case _ =>
+      invalid("All cases should have been covered: " + xs + ", " + xs.getClass)
+  }
+
+  def foreachLeafRight[T](xs: Conc[T])(f: Leaf[T] => Unit): Unit = (xs: @unchecked) match {
+    case left <> right =>
+      foreachLeafRight(right)(f)
+      foreachLeafRight(left)(f)
+    case Empty =>
+    case leaf: Leaf[T] =>
+      f(leaf)
+    case Append(left, right) =>
+      foreachLeafRight(right)(f)
+      foreachLeafRight(left)(f)
+    case Zero =>
+    case One(_1) =>
+      foreachLeafRight(_1)(f)
+    case Two(_1, _2) =>
+      foreachLeafRight(_2)(f)
+      foreachLeafRight(_1)(f)
+    case Three(_1, _2, _3) =>
+      foreachLeafRight(_3)(f) 
+      foreachLeafRight(_2)(f)
+      foreachLeafRight(_1)(f)
+    case Tip(Zero) =>
+    case Tip(num) =>
+      foreachLeafRight(num)(f)
+    case Lazy(_, conq, _) =>
+      foreachLeafRight(conq)(f)
+    case st: Spine[T] =>
+      foreachLeafRight(st.rwing)(f)
+      foreachLeafRight(st.rear)(f)
+      foreachLeafRight(st.lwing)(f)
+    case _ =>
+      invalid("All cases should have been covered: " + xs + ", " + xs.getClass)
   }
 
   def apply[@specialized(Byte, Char, Int, Long, Float, Double) T](xs: Conc[T], i: Int): T = (xs: @unchecked) match {
@@ -310,6 +393,20 @@ object ConcOps {
       new Single(y)
     case c: Chunk[T] =>
       new Chunk(updatedArray(c.array, i, y, c.size), c.size, c.k)
+  }
+
+  def concatConqueueTop[T](xs: Conqueue[T], ys: Conqueue[T]): Conqueue[T] = {
+    if (xs.level < 32 && (1 << xs.level) <= ys.level) {
+      var nys = ys
+      foreachLeafRight(xs)(leaf => nys = pushHeadTop(nys, leaf))
+      nys
+    } else if (ys.level < 32 && (1 << ys.level) <= xs.level) {
+      var nxs = xs
+      foreachLeafLeft(ys)(leaf => nxs = pushLastTop(nxs,leaf))
+      nxs
+    } else {
+      toConqueue(concatTop(xs.normalized, ys.normalized))
+    }
   }
 
   def concatTop[T](xs: Conc[T], ys: Conc[T]) = {
