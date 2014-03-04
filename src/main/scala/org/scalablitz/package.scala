@@ -76,7 +76,7 @@ package object scalablitz {
       case s: Single[T] =>
         ConcOps.pushLastTop(self, new Single(y))
       case c: Chunk[T] if c.size == c.k =>
-        val na = new Array(1)
+        val na = new Array[T](1)
         na(1) = y
         val nc = new Chunk(na, 1, c.k)
         ConcOps.pushLastTop(self, nc)
@@ -91,7 +91,7 @@ package object scalablitz {
       case s: Single[T] =>
         ConcOps.pushHeadTop(self, new Single(y))
       case c: Chunk[T] if c.size == c.k =>
-        val na = new Array(1)
+        val na = new Array[T](1)
         na(1) = y
         val nc = new Chunk(na, 1, c.k)
         ConcOps.pushHeadTop(self, nc)

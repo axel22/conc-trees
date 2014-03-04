@@ -374,6 +374,23 @@ object ConcOps {
       apply(left, i)
     case Append(left, right) =>
       apply(right, i - left.size)
+    case One(_1) =>
+      apply(_1, i)
+    case Two(_1, _2) =>
+      if (i < _1.size) apply(_1, i)
+      else apply(_2, i - _1.size)
+    case Three(_1, _2, _3) =>
+      if (i < _1.size) apply(_1, i)
+      else if (i < _1.size + _2.size) apply(_2, i - _1.size)
+      else apply(_3, i - _1.size - _2.size)
+    case Tip(num) =>
+      apply(num, i)
+    case Lazy(_, conq, _) =>
+      apply(conq, i)
+    case st: Spine[T] =>
+      if (i < st.lwing.size) apply(st.lwing, i)
+      else if (i < st.lwing.size + st.rear.size) apply(st.rear, i - st.lwing.size)
+      else apply(st.rwing, i - st.lwing.size - st.rear.size)
   }
 
   private def updatedArray[@specialized(Byte, Char, Int, Long, Float, Double) T: ClassTag](a: Array[T], i: Int, y: T, sz: Int): Array[T] = {
@@ -393,6 +410,12 @@ object ConcOps {
       new Single(y)
     case c: Chunk[T] =>
       new Chunk(updatedArray(c.array, i, y, c.size), c.size, c.k)
+    case Append(left, _) if i < left.size =>
+      update(left, i, y)
+    case Append(left, right) =>
+      update(right, i - left.size, y)
+    case _ =>
+      invalid("undefined for conqueues.")
   }
 
   def concatConqueueTop[T](xs: Conqueue[T], ys: Conqueue[T]): Conqueue[T] = {
@@ -488,6 +511,8 @@ object ConcOps {
       new Chunk(insertedArray(a, 0, i, y, sz), sz + 1, k)
     case Empty =>
       new Single(y)
+    case _ =>
+      invalid("undefined for conqueues.")
   }
 
   def appendTop[T](xs: Conc[T], ys: Leaf[T]): Conc[T] = (xs: @unchecked) match {
