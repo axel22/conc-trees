@@ -446,18 +446,32 @@ object ConcOps {
         val nr = concat(xs.right, ys)
         new <>(xs.left, nr)
       } else {
-        val nl = new <>(xs.left, xs.right.left)
-        val nr = concat(xs.right.right, ys)
-        new <>(nl, nr)
+        val nrr = concat(xs.right.right, ys)
+        if (nrr.level == xs.level - 3) {
+          val nl = xs.left
+          val nr = new <>(xs.right.left, nrr)
+          new <>(nl, nr)
+        } else {
+          val nl = new <>(xs.left, xs.right.left)
+          val nr = nrr
+          new <>(nl, nr)
+        }
       }
     } else {
       if (ys.right.level >= ys.left.level) {
         val nl = concat(xs, ys.left)
         new <>(nl, ys.right)
       } else {
-        val nl = concat(xs, ys.left.left)
-        val nr = new <>(ys.left.right, ys.right)
-        new <>(nl, nr)
+        val nll = concat(xs, ys.left.left)
+        if (nll.level == ys.level - 3) {
+          val nl = new <>(nll, ys.left.right)
+          val nr = ys.right
+          new <>(nl, nr)
+        } else {
+          val nl = nll
+          val nr = new <>(ys.left.right, ys.right)
+          new <>(nl, nr)
+        }
       }
     }
   }
