@@ -754,15 +754,11 @@ object ConcOps {
     }
   }
 
-  def pay[T](work: List[Spine[T]]): List[Spine[T]] = work match {
+  def pay[T](work: List[Spine[T]], n: Int): List[Spine[T]] = if (n == 0) work else work match {
     case head :: rest =>
       // do 2 units of work
       val tail = head.rear
-      if (tail.evaluated) pay(rest)
-      else {
-        val tailtail = tail.rear
-        tailtail.addIfUnevaluated(rest)
-      }
+      pay(tail.addIfUnevaluated(rest), n - 1)
     case Nil =>
       // hoorah - nothing to do
       Nil
@@ -912,8 +908,8 @@ object ConcOps {
   def pushHeadTop[T](conq: Conqueue[T], leaf: Leaf[T], onPush: () => Unit = doNothing): Conqueue[T] = conq match {
     case Conqueue.Lazy(lstack, queue, rstack) =>
       val nqueue = pushHead(queue, leaf, onPush)
-      val nlstack = pay(nqueue.addIfUnevaluated(lstack))
-      val nrstack = pay(rstack)
+      val nlstack = pay(nqueue.addIfUnevaluated(lstack), 2)
+      val nrstack = pay(rstack, 2)
       Conqueue.Lazy(nlstack, nqueue, nrstack)
     case _ =>
       pushHead(conq, leaf, onPush)
@@ -996,8 +992,8 @@ object ConcOps {
   def popHeadTop[T](conq: Conqueue[T], onFix: () => Unit = doNothing): Conqueue[T] = conq match {
     case Conqueue.Lazy(lstack, queue, rstack) =>
       val nqueue = popHead(queue, onFix)
-      val nlstack = pay(nqueue.addIfUnevaluated(lstack))
-      val nrstack = pay(rstack)
+      val nlstack = pay(nqueue.addIfUnevaluated(lstack), 2)
+      val nrstack = pay(rstack, 2)
       Conqueue.Lazy(nlstack, nqueue, nrstack)
     case _ =>
       popHead(conq, onFix)
@@ -1055,8 +1051,8 @@ object ConcOps {
   def pushLastTop[T](conq: Conqueue[T], leaf: Leaf[T], onPush: () => Unit = doNothing): Conqueue[T] = conq match {
     case Conqueue.Lazy(lstack, queue, rstack) =>
       val nqueue = pushLast(queue, leaf, onPush)
-      val nlstack = pay(lstack)
-      val nrstack = pay(nqueue.addIfUnevaluated(rstack))
+      val nlstack = pay(lstack, 2)
+      val nrstack = pay(nqueue.addIfUnevaluated(rstack), 2)
       Conqueue.Lazy(nlstack, nqueue, nrstack)
     case _ =>
       pushLast(conq, leaf, onPush)
@@ -1137,8 +1133,8 @@ object ConcOps {
   def popLastTop[T](conq: Conqueue[T], onFix: () => Unit = doNothing): Conqueue[T] = conq match {
     case Conqueue.Lazy(lstack, queue, rstack) =>
       val nqueue = popLast(queue, onFix)
-      val nlstack = pay(lstack)
-      val nrstack = pay(nqueue.addIfUnevaluated(rstack))
+      val nlstack = pay(lstack, 2)
+      val nrstack = pay(nqueue.addIfUnevaluated(rstack), 2)
       Conqueue.Lazy(nlstack, nqueue, nrstack)
     case _ =>
       popLast(conq, onFix)
