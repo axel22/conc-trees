@@ -197,7 +197,7 @@ class ConqueueBuffer[@specialized(Byte, Char, Int, Long, Float, Double) T: Class
     buffer.mkString("ConqueueBuffer(", ", ", ")")
   }
 
-  private[scalablitz] def diagnosticString = {
+  private[core] def diagnosticString = {
     println(s"-----------")
     println(s"leftIndex/leftStart: $leftIndex/$leftStart")
     println(s"leftChunk:  ${leftChunk.mkString(", ")}")

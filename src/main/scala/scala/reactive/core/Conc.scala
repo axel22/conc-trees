@@ -190,7 +190,7 @@ object ConcOps {
   import ConcRope._
   import Conqueue._
 
-  private[scalablitz] def toSeq[T](xs: Conc[T]): Seq[T] = {
+  private[core] def toSeq[T](xs: Conc[T]): Seq[T] = {
     val buffer = collection.mutable.Buffer[T]()
     for (x <- xs) {
       buffer += x
@@ -476,7 +476,7 @@ object ConcOps {
     }
   }
 
-  private[scalablitz] def insertedArray[@specialized(Byte, Char, Int, Long, Float, Double) T: ClassTag](a: Array[T], from: Int, i: Int, y: T, sz: Int): Array[T] = {
+  private[core] def insertedArray[@specialized(Byte, Char, Int, Long, Float, Double) T: ClassTag](a: Array[T], from: Int, i: Int, y: T, sz: Int): Array[T] = {
     val na = new Array[T](sz + 1)
     System.arraycopy(a, from, na, 0, i)
     na(i) = y
@@ -484,14 +484,14 @@ object ConcOps {
     na
   }
 
-  private[scalablitz] def removedArray[T: ClassTag](a: Array[T], from: Int, at: Int, sz: Int): Array[T] = {
+  private[core] def removedArray[T: ClassTag](a: Array[T], from: Int, at: Int, sz: Int): Array[T] = {
     val na = new Array[T](sz - 1)
     System.arraycopy(a, from, na, 0, at)
     System.arraycopy(a, from + at + 1, na, at, sz - at - 1)
     na
   }
 
-  private[scalablitz] def copiedArray[T: ClassTag](a: Array[T], from: Int, sz: Int): Array[T] = {
+  private[core] def copiedArray[T: ClassTag](a: Array[T], from: Int, sz: Int): Array[T] = {
     val na = new Array[T](sz)
     System.arraycopy(a, from, na, 0, sz)
     na
