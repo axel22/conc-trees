@@ -1,4 +1,4 @@
-package org
+package scala.reactive
 
 
 
@@ -6,7 +6,7 @@ import scala.reflect.ClassTag
 
 
 
-package object scalablitz {
+package object core {
 
   def invalid(msg: String) = throw new IllegalStateException(msg)
 

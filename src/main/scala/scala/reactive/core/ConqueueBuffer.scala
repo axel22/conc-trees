@@ -1,4 +1,4 @@
-package org.scalablitz
+package scala.reactive.core
 
 
 
