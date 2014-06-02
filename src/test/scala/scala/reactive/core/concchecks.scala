@@ -539,6 +539,7 @@ object ConcChecks extends Properties("Conc") with ConcSnippets {
         val bothEmpty = (cb.isEmpty && v.isEmpty)
         val condition = if (bothEmpty) s"both empty" else s"both non-empty"
         if (!(bothEmpty || (cb.head == v.head && cb.last == v.last))) {
+          println("-----------------")
           println(cb.diagnosticString)
           println(s"op: $op")
           println(v)
